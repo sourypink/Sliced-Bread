@@ -25,6 +25,7 @@ EMPTY_STATES = {
 }
 NAME_PLACEHOLDERS = {"income": "Salary", "necessities": "Rent", "discretionary": "Concert tickets", "travel": "Flights"}
 LIMIT_LABELS = {"overall": "Monthly limit", **SECTION_NAMES}
+TARGET_LABELS = {"needs": "Needs", "wants": "Wants", "savings": "Savings"}
 
 def html(value, **options):
     return gr.HTML(value, padding=False, **options)
@@ -103,29 +104,50 @@ def investments_html(user_budget, key):
     return f'{head}{note}<div style="margin-top:8px">{savings}</div>'
 
 
-def limit_alerts(before, after, key):
-    """Warn when an added expense pushes a limit into "near" or "over"."""
-    for limit_key in budget.LIMIT_KEYS:
-        limit = after["settings"]["limits"][limit_key]
+def split_html(user_budget, month):
+    """Needs, wants and savings against the user's percentage targets. Empty when targets are off."""
+    targets = user_budget["settings"].get("targets", {})
+    meters = budget.target_meters(targets, month)
+    if not meters:
+        return ""
+    plan = "/".join(str(targets[key]) for key in budget.TARGET_KEYS)
+    rows = "".join(
+        design.meter_html(result, f"{TARGET_LABELS[key]} {result['actual_percent']}% of {result['target_percent']}%")
+        for key, result in meters.items()
+    )
+    return f'<div class="sb-title">Your {plan} split</div><div class="sb-split">{rows}</div>'
 
-        def spent(user_budget):
-            month = budget.get_month(user_budget, key)
-            if limit_key == "overall":
-                return budget.total_expenses(month)
-            return budget.section_total(month, limit_key)
 
-        old_state = budget.meter(spent(before), limit)["state"]
-        new = budget.meter(spent(after), limit)
-        if new["state"] in ("warn", "over") and new["state"] != old_state:
-            gr.Warning(f"{LIMIT_LABELS[limit_key]}: {new['label']}", title="Budget alert")
+def watched_meters(user_budget, key):
+    """Every limit and target an alert watches, by the name the alert shows."""
+    month = budget.get_month(user_budget, key)
+    limits = user_budget["settings"]["limits"]
+    spent = {"overall": budget.total_expenses(month)}
+    spent.update({section: budget.section_total(month, section) for section in budget.EXPENSE_SECTIONS})
+    meters = {LIMIT_LABELS[limit_key]: budget.meter(spent[limit_key], limits[limit_key]) for limit_key in budget.LIMIT_KEYS}
+    targets = budget.target_meters(user_budget["settings"].get("targets", {}), month)
+    meters.update({f"{TARGET_LABELS[target]} target": result for target, result in targets.items() if target != "savings"})
+    return meters
+
+
+def budget_alerts(before, after, key):
+    """Warn when a change pushes a limit or target into "near" or "over"."""
+    old = watched_meters(before, key)
+    for label, new in watched_meters(after, key).items():
+        if new["state"] in ("warn", "over") and new["state"] != old.get(label, {"state": "none"})["state"]:
+            gr.Warning(f"{label}: {new['label']}", title="Budget alert")
 
 
 # ---------- Event handlers ----------
 
 def make_toggle(section):
     def toggle(open_section):
-        return None if open_section == section else section
+        return None if open_section == ("add", section) else ("add", section)
     return toggle
+
+
+def make_open(value):
+    return lambda: value
 
 
 def make_add(section):
@@ -136,17 +158,31 @@ def make_add(section):
         except ValueError as error:
             raise fail(str(error))
         storage.save_budget(user, updated)
-        limit_alerts(user_budget, updated, key)
+        budget_alerts(user_budget, updated, key)
         return updated, "", ""
     return add
 
 
+def make_update(section, index):
+    def update(user, user_budget, key, name, amount):
+        updated = copy.deepcopy(user_budget)
+        try:
+            budget.update_item(updated, key, section, index, name, amount)
+        except ValueError as error:
+            raise fail(str(error))
+        storage.save_budget(user, updated)
+        budget_alerts(user_budget, updated, key)
+        return updated, None
+    return update
+
+
 def make_remove(section, index):
-    def remove(user, user_budget, key):
+    def remove(user, user_budget, key, open_section):
         updated = copy.deepcopy(user_budget)
         budget.remove_item(updated, key, section, index)
         storage.save_budget(user, updated)
-        return updated
+        # An open edit row points at a line position that just moved, so close it; an add row can stay.
+        return updated, open_section if open_section and open_section[0] == "add" else None
     return remove
 
 
@@ -167,8 +203,14 @@ def signed_in(username):
         display_name,
         *[dollars_text(settings["limits"][key]) for key in budget.LIMIT_KEYS],
         dollars_text(settings["savings_goal"]),
+        *target_texts(settings.get("targets", {})),
         "", "",
     )
+
+
+def target_texts(targets):
+    """Pre-fill for the three target boxes: "50", "30", "20", or blanks when off."""
+    return [str(targets[key]) if targets else "" for key in budget.TARGET_KEYS]
 
 
 def sign_in(username, password):
@@ -201,6 +243,22 @@ def save_settings(user, user_budget, overall, necessities, discretionary, travel
     storage.save_budget(user, updated)
     gr.Info("Limits and goal saved", title="Saved")
     return updated
+
+
+def save_targets(user, user_budget, needs, wants, savings):
+    try:
+        targets = budget.parse_targets(needs, wants, savings)
+    except ValueError as error:
+        raise fail(str(error))
+    updated = copy.deepcopy(user_budget)
+    updated["settings"]["targets"] = targets
+    storage.save_budget(user, updated)
+    gr.Info("Targets saved" if targets else "Targets turned off", title="Saved")
+    return updated, *target_texts(targets)
+
+
+def use_50_30_20(user, user_budget):
+    return save_targets(user, user_budget, *(str(percent) for percent in budget.RULE_50_30_20.values()))
 
 
 def parse_field(label, text):
@@ -238,7 +296,7 @@ with gr.Blocks(title="Sliced Bread") as demo:
     user_state = gr.State(None)  # signed-in username
     budget_state = gr.State(None)  # that user's whole budget
     month_state = gr.State(budget.month_key())  # month on screen, "2026-10"
-    open_state = gr.State(None)  # section whose add row is open
+    open_state = gr.State(None)  # ("add", section) or ("edit", section, index): the one open form
 
     # Sign in / create account
     with gr.Column(elem_classes="sb-card") as auth_view:
@@ -269,11 +327,16 @@ with gr.Blocks(title="Sliced Bread") as demo:
                     if not user_budget:
                         return
                     month = budget.get_month(user_budget, key)
+                    opened = tuple(open_section) if open_section else None
                     with gr.Column(elem_classes="sb-card"):
                         html(hero_html(user_budget, key))
+                    split = split_html(user_budget, month)
+                    if split:
+                        with gr.Column(elem_classes="sb-card"):
+                            html(split)
 
                     for section in budget.SECTIONS:
-                        is_open = open_section == section
+                        is_open = opened == ("add", section)
                         with gr.Column(elem_classes="sb-card"):
                             with gr.Row(elem_classes="sb-row"):
                                 html(section_head_html(user_budget, month, section), elem_classes="sb-grow")
@@ -302,10 +365,25 @@ with gr.Blocks(title="Sliced Bread") as demo:
                             if not items and not is_open:
                                 html(f'<div class="sb-note">{EMPTY_STATES[section]}</div>')
                             for index, item in enumerate(items):
+                                if opened == ("edit", section, index):
+                                    with gr.Column(elem_classes="sb-add"):
+                                        with gr.Row(elem_classes="sb-row"):
+                                            edit_name = gr.Textbox(label="Name", value=item["name"], autofocus=True, scale=3, min_width=0)
+                                            edit_amount = gr.Textbox(label="Amount", value=dollars_text(item["amount"]), scale=2, min_width=0)
+                                        with gr.Row(elem_classes="sb-row"):
+                                            save_button = gr.Button("Save", variant="primary")
+                                            cancel_edit_button = gr.Button("Cancel")
+                                    edit_inputs = [user_state, budget_state, month_state, edit_name, edit_amount]
+                                    for trigger in (save_button.click, edit_name.submit, edit_amount.submit):
+                                        trigger(make_update(section, index), inputs=edit_inputs, outputs=[budget_state, open_state])
+                                    cancel_edit_button.click(lambda: None, outputs=open_state)
+                                    continue
                                 with gr.Row(elem_classes="sb-row sb-item"):
                                     html(design.line_html(item["name"], item["amount"]), elem_classes="sb-grow")
+                                    edit = gr.Button("✎", elem_classes="sb-x", min_width=0, scale=0)
+                                    edit.click(make_open(("edit", section, index)), outputs=open_state)
                                     remove = gr.Button("✕", elem_classes="sb-x", min_width=0, scale=0)
-                                    remove.click(make_remove(section, index), inputs=[user_state, budget_state, month_state], outputs=budget_state)
+                                    remove.click(make_remove(section, index), inputs=[user_state, budget_state, month_state, open_state], outputs=[budget_state, open_state])
 
                     with gr.Column(elem_classes="sb-card"):
                         html(investments_html(user_budget, key))
@@ -321,6 +399,19 @@ with gr.Blocks(title="Sliced Bread") as demo:
                         limit_travel = gr.Textbox(label="Travel", placeholder="No limit", min_width=120)
                     savings_goal = gr.Textbox(label="Savings goal", placeholder="No goal")
                     save_limits_button = gr.Button("Save limits and goal", variant="primary")
+
+                with gr.Column(elem_classes="sb-card"):
+                    html(
+                        '<div class="sb-title">Percentage targets</div><div class="sb-note">Needs are necessities, '
+                        "wants are discretionary and travel, savings is what is left. Leave blank to turn off.</div>"
+                    )
+                    with gr.Row():
+                        target_needs = gr.Textbox(label="Needs %", placeholder="Off", min_width=80)
+                        target_wants = gr.Textbox(label="Wants %", placeholder="Off", min_width=80)
+                        target_savings = gr.Textbox(label="Savings %", placeholder="Off", min_width=80)
+                    with gr.Row():
+                        use_rule_button = gr.Button("Use 50/30/20")
+                        save_targets_button = gr.Button("Save targets", variant="primary")
 
                 with gr.Column(elem_classes="sb-card"):
                     html('<div class="sb-title">Profile</div>')
@@ -346,7 +437,8 @@ with gr.Blocks(title="Sliced Bread") as demo:
 
     limit_boxes = [limit_overall, limit_necessities, limit_discretionary, limit_travel]
     session_outputs = [user_state, budget_state, month_state, open_state, auth_view, app_view]
-    signed_in_outputs = session_outputs + [greeting, display_name, *limit_boxes, savings_goal, login_password, new_password]
+    target_boxes = [target_needs, target_wants, target_savings]
+    signed_in_outputs = session_outputs + [greeting, display_name, *limit_boxes, savings_goal, *target_boxes, login_password, new_password]
 
     for trigger in (login_button.click, login_password.submit):
         trigger(sign_in, inputs=[login_username, login_password], outputs=signed_in_outputs)
@@ -359,6 +451,8 @@ with gr.Blocks(title="Sliced Bread") as demo:
     next_month.click(lambda key: (budget.shift_month(key, 1), None), inputs=month_state, outputs=[month_state, open_state])
 
     save_limits_button.click(save_settings, inputs=[user_state, budget_state, *limit_boxes, savings_goal], outputs=budget_state)
+    save_targets_button.click(save_targets, inputs=[user_state, budget_state, *target_boxes], outputs=[budget_state, *target_boxes])
+    use_rule_button.click(use_50_30_20, inputs=[user_state, budget_state], outputs=[budget_state, *target_boxes])
     save_name_button.click(save_display_name, inputs=[user_state, display_name], outputs=[greeting, display_name])
     change_password_button.click(change_password, inputs=[user_state, current_password, changed_password], outputs=[current_password, changed_password])
 

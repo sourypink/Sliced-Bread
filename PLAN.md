@@ -22,11 +22,13 @@ Maps to the brief's feature list:
 |---|---|
 | Income tracking | Income section, total at the top |
 | Expense tracking (amount, category, description) | Sections 2–4; the section *is* the category, the line name is the description |
+| Edit a line | ✎ on a line opens it in place; Save or Cancel |
 | Overall + per-category budgets | Account page: one limit per section, plus an overall monthly limit |
 | Automatic calculations | `budget.py`; every add or delete recomputes |
 | Budget alerts | A meter under each section: near limit at 90%, over at 100% |
 | Monthly summary | The hero line and stacked bar at the top of the page; month picker |
 | Savings goal | Investments section: progress toward the goal set on the account page |
+| Percentage targets (50/30/20) | Account page sets needs/wants/savings %; a split card under the hero compares actual vs target and alerts on overspend |
 
 ## 2. Screens
 
@@ -81,6 +83,7 @@ hero says the same.
 - Display name, change password, sign out
 - Monthly limits: overall, necessities, discretionary, travel (blank = no limit, no meter)
 - Savings goal (amount)
+- Percentage targets: needs (necessities), wants (discretionary + travel), savings (what is left); "Use 50/30/20" fills and saves them
 - Delete my data (asks to confirm)
 
 ## 3. Code structure

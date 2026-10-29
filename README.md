@@ -1,7 +1,8 @@
 # Sliced Bread
 
 A personal budget tracker in Python and Gradio. Add your income and spending; it tells you how much is
-left to invest each month, warns you near and over your limits, and tracks a savings goal.
+left to invest each month, warns you near and over your limits, checks your split against targets
+like 50/30/20, and tracks a savings goal.
 
 ## Run it in Google Colab
 
@@ -37,7 +38,7 @@ python -m pytest
 | `budget.py` | The math: totals, what's left, limit alerts, savings progress, input checks. |
 | `storage.py` | Accounts (salted, hashed passwords) and saving each user's budget as JSON. |
 | `design.py` | "Toast", the design system: colours, type, spacing, the Gradio theme and CSS. |
-| `test_budget.py` | 52 tests for `budget.py` and `storage.py`. |
+| `test_budget.py` | Tests for `budget.py` and `storage.py`. |
 | `PLAN.md` | The plan: features, screens, design system, timeline and roles. |
 
 Money is stored in whole cents so totals never drift. Investments aren't stored: they're always income

@@ -135,6 +135,7 @@ footer {{ display: none !important; }}
 .sb-meter {{ height: 8px; background: var(--sb-line); border-radius: 999px; overflow: hidden; }}
 .sb-meter > span {{ display: block; height: 100%; border-radius: 999px; }}
 .sb-meter-row {{ display: grid; gap: 4px; }}
+.sb-split {{ display: grid; gap: 12px; margin-top: 12px; }}
 .sb-meter-label {{ font-size: 14px; color: var(--sb-ink); display: flex; justify-content: space-between; gap: 8px; }}
 
 /* Where the money went: one stacked bar and its key. */

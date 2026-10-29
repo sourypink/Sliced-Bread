@@ -7,6 +7,12 @@ SECTIONS = ("income", "necessities", "discretionary", "travel")
 EXPENSE_SECTIONS = ("necessities", "discretionary", "travel")
 LIMIT_KEYS = ("overall",) + EXPENSE_SECTIONS
 
+# Percentage targets: which sections count as needs and wants. Savings is whatever is left.
+TARGET_KEYS = ("needs", "wants", "savings")
+TARGET_GROUPS = {"needs": ("necessities",), "wants": ("discretionary", "travel")}
+RULE_50_30_20 = {"needs": 50, "wants": 30, "savings": 20}
+PERCENT_WHOLE = 100
+
 WARN_AT = 0.9  # share of a limit at which the meter turns to "near limit"
 MAX_AMOUNT_CENTS = 10_000_000 * 100  # $10M; anything larger is a typo
 MAX_NAME_LENGTH = 40  # characters
@@ -21,7 +27,7 @@ def empty_month():
 def empty_budget():
     """A new user's budget: no limits, no goal, no months."""
     return {
-        "settings": {"savings_goal": 0, "limits": {key: 0 for key in LIMIT_KEYS}},
+        "settings": {"savings_goal": 0, "limits": {key: 0 for key in LIMIT_KEYS}, "targets": {}},
         "months": {},
     }
 
@@ -121,6 +127,55 @@ def remove_item(budget, month_key, section, index):
     if not 0 <= index < len(items):
         raise IndexError(f"No line {index} in {section}")
     items.pop(index)
+
+
+def update_item(budget, month_key, section, index, name_text, amount_text):
+    """Validate and replace one line; returns the new item."""
+    items = budget["months"].get(month_key, empty_month())[section]
+    if not 0 <= index < len(items):
+        raise IndexError(f"No line {index} in {section}")
+    item = {"name": clean_name(name_text), "amount": parse_amount(amount_text)}
+    items[index] = item
+    return item
+
+
+def parse_targets(needs_text, wants_text, savings_text):
+    """Turn three typed percentages into targets. All blank means targets are off ({})."""
+    typed = dict(zip(TARGET_KEYS, (needs_text, wants_text, savings_text)))
+    cleaned = {key: str(text if text is not None else "").strip().rstrip("%").strip() for key, text in typed.items()}
+    if not any(cleaned.values()):
+        return {}
+    targets = {}
+    for key, text in cleaned.items():
+        if not text.isdigit() or int(text) > PERCENT_WHOLE:
+            raise ValueError(f"{key.capitalize()} must be a whole number from 0 to 100")
+        targets[key] = int(text)
+    total = sum(targets.values())
+    if total != PERCENT_WHOLE:
+        raise ValueError(f"Targets must add up to 100% (now {total}%)")
+    return targets
+
+
+def target_meters(targets, month):
+    """Each target's meter, with the actual and target percent of income. Empty when off or no income."""
+    income = section_total(month, "income")
+    if not targets or income <= 0:
+        return {}
+    meters = {}
+    for key, sections in TARGET_GROUPS.items():
+        spent = sum(section_total(month, section) for section in sections)
+        result = meter(spent, income * targets[key] // PERCENT_WHOLE)
+        meters[key] = {**result, "actual_percent": round(spent * PERCENT_WHOLE / income), "target_percent": targets[key]}
+    saved = max(leftover(month), 0)
+    goal = income * targets["savings"] // PERCENT_WHOLE
+    if goal <= 0:
+        result = {"state": "none", "fraction": 0.0, "label": ""}
+    elif saved >= goal:
+        result = {"state": "good", "fraction": 1.0, "label": "On target"}
+    else:
+        result = {"state": "warn", "fraction": saved / goal, "label": f"{format_money(goal - saved)} short"}
+    meters["savings"] = {**result, "actual_percent": round(saved * PERCENT_WHOLE / income), "target_percent": targets["savings"]}
+    return meters
 
 
 def get_month(budget, month_key):

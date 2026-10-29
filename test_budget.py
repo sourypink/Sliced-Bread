@@ -125,6 +125,74 @@ def test_month_key_and_label():
     assert budget.month_label("2026-10") == "October 2026"
 
 
+# ---------- budget.py: editing a line ----------
+
+def test_update_item_replaces_name_and_amount():
+    user_budget = make_budget()
+    budget.update_item(user_budget, "2026-10", "necessities", 0, "Rent and water", "1,250")
+    month = budget.get_month(user_budget, "2026-10")
+    assert month["necessities"][0] == {"name": "Rent and water", "amount": 125000}
+    assert budget.section_total(month, "necessities") == 125000 + 38050
+
+
+def test_update_item_rejects_bad_input_without_changing_anything():
+    user_budget = make_budget()
+    with pytest.raises(ValueError):
+        budget.update_item(user_budget, "2026-10", "necessities", 0, "Rent", "-5")
+    with pytest.raises(IndexError):
+        budget.update_item(user_budget, "2026-10", "necessities", 9, "Rent", "5")
+    assert budget.get_month(user_budget, "2026-10")["necessities"][0] == {"name": "Rent", "amount": 120000}
+
+
+# ---------- budget.py: percentage targets ----------
+
+@pytest.mark.parametrize("typed, targets", [
+    (("50", "30", "20"), {"needs": 50, "wants": 30, "savings": 20}),
+    (("60%", " 20 ", "20"), {"needs": 60, "wants": 20, "savings": 20}),
+    (("", "", ""), {}),
+    ((None, None, None), {}),
+])
+def test_parse_targets_accepts(typed, targets):
+    assert budget.parse_targets(*typed) == targets
+
+
+@pytest.mark.parametrize("typed, message", [
+    (("50", "30", "10"), r"add up to 100% \(now 90%\)"),
+    (("50", "", "20"), "Wants must be a whole number"),
+    (("50.5", "29.5", "20"), "Needs must be a whole number"),
+    (("150", "-30", "-20"), "Needs must be a whole number"),
+])
+def test_parse_targets_rejects(typed, message):
+    with pytest.raises(ValueError, match=message):
+        budget.parse_targets(*typed)
+
+
+def test_target_meters_compare_spending_to_share_of_income():
+    # Income $3,200; needs $1,580.50; wants $340; left $1,279.50.
+    meters = budget.target_meters(budget.RULE_50_30_20, budget.get_month(make_budget(), "2026-10"))
+    assert meters["needs"]["actual_percent"] == 49 and meters["needs"]["state"] == "warn"
+    assert meters["needs"]["label"] == "Near limit, $19.50 left"
+    assert meters["wants"]["actual_percent"] == 11 and meters["wants"]["state"] == "good"
+    assert meters["savings"]["actual_percent"] == 40 and meters["savings"]["label"] == "On target"
+
+
+def test_target_meters_flag_overspending_and_short_savings():
+    user_budget = budget.empty_budget()
+    budget.add_item(user_budget, "2026-10", "income", "Job", "1000")
+    budget.add_item(user_budget, "2026-10", "necessities", "Rent", "600")
+    budget.add_item(user_budget, "2026-10", "travel", "Trip", "300")
+    meters = budget.target_meters(budget.RULE_50_30_20, budget.get_month(user_budget, "2026-10"))
+    assert meters["needs"]["label"] == "Over by $100"
+    assert meters["wants"]["state"] == "warn"
+    assert meters["savings"]["state"] == "warn" and meters["savings"]["label"] == "$100 short"
+
+
+def test_target_meters_empty_without_targets_or_income():
+    month = budget.get_month(make_budget(), "2026-10")
+    assert budget.target_meters({}, month) == {}
+    assert budget.target_meters(budget.RULE_50_30_20, budget.empty_month()) == {}
+
+
 # ---------- storage.py ----------
 
 @pytest.fixture(autouse=True)
