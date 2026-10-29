@@ -5,9 +5,8 @@ left to invest each month, warns you near and over your limits, and tracks a sav
 
 ## Run it in Google Colab
 
-1. Open `run_in_colab.ipynb` in Colab (File > Upload notebook, or open it from GitHub).
-2. Set `REPO_URL` in cell 1 to this repo's URL.
-3. Run cell 1, then cell 2. Open the `gradio.live` link cell 2 prints.
+1. In Colab: File > Open notebook > GitHub, paste `sourypink/Sliced-Bread`, open `run_in_colab.ipynb`.
+2. Run cell 1, then cell 2. Open the `gradio.live` link cell 2 prints.
 
 Colab forgets files when the runtime resets. To keep accounts between sessions, run the optional Google
 Drive cell before cell 2.
