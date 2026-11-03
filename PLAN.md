@@ -28,6 +28,7 @@ Maps to the brief's feature list:
 | Budget alerts | A meter under each section: near limit at 90%, over at 100% |
 | Monthly summary | The hero line and stacked bar at the top of the page; month picker |
 | Savings goal | Investments section: progress toward the goal set on the account page |
+| History over months | History tab: earned vs spent columns per month (6 / 12 months / All), zoom on one category with the rest greyed, biggest items, a table of every number, and sample months for demos |
 | Percentage targets (50/30/20) | Account page sets needs/wants/savings %; a split card under the hero compares actual vs target and alerts on overspend |
 
 ## 2. Screens
@@ -78,6 +79,17 @@ Two screens after sign-in, as tabs: **Budget** (landing) and **Account**. Before
 If expenses exceed income, Investments reads **"Over budget by $85"** in the over-limit color and the
 hero says the same.
 
+### History
+
+- Filters in one row of pills: range (6 months, 12 months, All) and category (All spending, Necessities,
+  Discretionary, Travel).
+- Three tiles for the range: earned, spent, left. When zoomed: spent on that category, monthly average, share.
+- Column chart per month: earned beside spent (stacked by category). Pick a category and earned drops out, the
+  axis rescales to spending, the category sits at the base in colour and everything else turns grey.
+- Biggest items in the chosen category, and "See the numbers" opens a table with every value.
+- Under three months of data, the duck offers "Fill 5 sample months": fixed demo data, tagged "(sample)", only
+  in empty months before this one.
+
 ### Account
 
 - Sign out
@@ -96,6 +108,7 @@ sliced-bread/
   budget.py         Pure logic: totals, leftover, meter state, savings progress, input validation
   storage.py        Read/write one JSON budget per name (demo mode: no passwords)
   design.py         The design system in code: Gradio theme + one CSS string
+  charts.py         History tab: column chart, tiles, table (plain HTML, no Gradio)
   test_budget.py    pytest for budget.py and storage.py
   requirements.txt  gradio (pinned to the version Colab ships)
   run_in_colab.ipynb  Two-cell launcher
@@ -183,8 +196,10 @@ limit, red means over. Status never relies on colour alone: every meter carries 
 | `warn` | `#D99A00` | Meter fill 90–100% |
 | `over` | `#B42318` | Meter fill over 100%, "Over budget" amount |
 
-Section dots and the stacked bar (fills only): income `ink`, necessities `#3B6FB5`, discretionary `#8E4FA8`,
-travel `#1E8C93`, investments `accent`. The duck has its own colours and they are used nowhere else.
+Section dots, bars and chart columns (fills only): income and investments `accent`, necessities `#2A78D6`,
+discretionary `#EB6834`, travel `#1BAF7A`; unpicked categories in a zoomed chart `#D9D4CA`. Checked with the
+dataviz palette validator (all pairs pass, including colour-blind separation); the earlier blue and purple
+did not. The duck has its own colours and they are used nowhere else.
 
 ### Type
 

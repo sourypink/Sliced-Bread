@@ -7,6 +7,7 @@ from html import escape
 import gradio as gr
 
 import budget
+import charts
 import design
 import storage
 
@@ -26,6 +27,9 @@ EMPTY_STATES = {
 NAME_PLACEHOLDERS = {"income": "Salary", "necessities": "Rent", "discretionary": "Concert tickets", "travel": "Flights"}
 LIMIT_LABELS = {"overall": "Monthly limit", **SECTION_NAMES}
 TARGET_LABELS = {"needs": "Needs", "wants": "Wants", "savings": "Savings"}
+RANGE_CHOICES = ["6 months", "12 months", "All"]
+CATEGORY_CHOICES = {"All spending": "all", "Necessities": "necessities", "Discretionary": "discretionary", "Travel": "travel"}
+SAMPLE_OFFER_BELOW = 3  # months with data; under this, History offers sample months
 
 def html(value, **options):
     return gr.HTML(value, padding=False, **options)
@@ -287,6 +291,31 @@ def parse_field(label, text):
         raise ValueError(f"{label}: {error}")
 
 
+def history_view(user_budget, range_choice, category_choice):
+    """The History tab for a range and a category: tiles, chart, biggest items, and whether to offer samples."""
+    if not user_budget:
+        return "", "", "", gr.update(visible=False), gr.update(visible=False)
+    category = CATEGORY_CHOICES[category_choice]
+    end_key, count = budget.history_range(user_budget, range_choice, budget.month_key())
+    rows = budget.month_history(user_budget, end_key, count)
+    items = ""
+    if category in charts.SECTION_NAMES:
+        items = charts.top_items_html(budget.top_items(user_budget, [row["key"] for row in rows], category), category)
+    offer_samples = budget.months_with_data(user_budget) < SAMPLE_OFFER_BELOW
+    return (
+        charts.stat_tiles_html(rows, category), charts.history_chart(rows, category), items,
+        gr.update(visible=bool(items)), gr.update(visible=offer_samples),
+    )
+
+
+def fill_samples(user, user_budget):
+    updated = copy.deepcopy(user_budget)
+    filled = budget.fill_sample_months(updated, budget.month_key())
+    storage.save_budget(user, updated)
+    gr.Info(f"Added {filled} sample months" if filled else "Those months already have data", title="Samples")
+    return updated
+
+
 def delete_data(user):
     storage.delete_budget(user)
     gr.Info("Your data is deleted", title="Deleted")
@@ -396,6 +425,21 @@ with gr.Blocks(title="Sliced Bread") as demo:
                     with gr.Column(elem_classes="sb-card sb-card-accent"):
                         html(investments_html(user_budget, key))
 
+            with gr.Tab("History", id="history"):
+                range_pick = gr.Radio(RANGE_CHOICES, value=RANGE_CHOICES[0], show_label=False, container=False, elem_classes="sb-pills")
+                category_pick = gr.Radio(list(CATEGORY_CHOICES), value="All spending", show_label=False, container=False, elem_classes="sb-pills")
+                with gr.Column(elem_classes="sb-card", visible=False) as sample_card:
+                    html(
+                        f'<div class="sb-duck-says" style="margin:0;padding:0;border:0">{design.duck_mark(44)}'
+                        '<div class="sb-bubble">Only a month or two so far. Want sample months to see how this looks?</div></div>'
+                    )
+                    sample_button = gr.Button("Fill 5 sample months", variant="primary")
+                history_tiles = html("")
+                with gr.Column(elem_classes="sb-card"):
+                    history_chart = html("")
+                with gr.Column(elem_classes="sb-card", visible=False) as items_card:
+                    history_items = html("")
+
             with gr.Tab("Account", id="account"):
                 with gr.Column(elem_classes="sb-card"):
                     html('<div class="sb-title">Monthly limits</div><div class="sb-note">Leave blank for no limit.</div>')
@@ -448,6 +492,11 @@ with gr.Blocks(title="Sliced Bread") as demo:
     save_limits_button.click(save_settings, inputs=[user_state, budget_state, *limit_boxes, savings_goal], outputs=budget_state)
     save_targets_button.click(save_targets, inputs=[user_state, budget_state, *target_boxes], outputs=[budget_state, *target_boxes])
     use_rule_button.click(use_50_30_20, inputs=[user_state, budget_state], outputs=[budget_state, *target_boxes])
+
+    history_outputs = [history_tiles, history_chart, history_items, items_card, sample_card]
+    for trigger in (budget_state.change, range_pick.change, category_pick.change):
+        trigger(history_view, inputs=[budget_state, range_pick, category_pick], outputs=history_outputs)
+    sample_button.click(fill_samples, inputs=[user_state, budget_state], outputs=budget_state)
 
     sign_out_button.click(sign_out, outputs=session_outputs + [greeting, login_password])
     delete_button.click(lambda: gr.update(visible=True), outputs=delete_confirm)

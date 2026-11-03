@@ -193,6 +193,55 @@ def test_target_meters_empty_without_targets_or_income():
     assert budget.target_meters(budget.RULE_50_30_20, budget.empty_month()) == {}
 
 
+# ---------- budget.py: history ----------
+
+def test_month_history_is_oldest_first_with_empty_months_as_zeros():
+    rows = budget.month_history(make_budget(), "2026-11", 3)
+    assert [row["key"] for row in rows] == ["2026-09", "2026-10", "2026-11"]
+    assert [row["label"] for row in rows] == ["Sep", "Oct", "Nov"]
+    assert rows[0]["income"] == 0 and rows[0]["spent"] == 0 and rows[0]["left"] == 0
+    october = rows[1]
+    assert october["income"] == 320000 and october["spent"] == 192050 and october["left"] == 127950
+    assert october["sections"] == {"necessities": 158050, "discretionary": 4000, "travel": 30000}
+
+
+def test_month_history_crosses_the_year_boundary():
+    assert [row["key"] for row in budget.month_history(budget.empty_budget(), "2027-01", 3)] == ["2026-11", "2026-12", "2027-01"]
+
+
+@pytest.mark.parametrize("choice, count", [("6 months", 6), ("12 months", 12)])
+def test_history_range_fixed_windows_end_today(choice, count):
+    assert budget.history_range(make_budget(), choice, "2026-11") == ("2026-11", count)
+
+
+def test_history_range_all_starts_at_the_first_month_with_data():
+    assert budget.history_range(make_budget(), "All", "2026-11") == ("2026-11", 2)
+    assert budget.history_range(budget.empty_budget(), "All", "2026-11") == ("2026-11", 1)
+
+
+def test_history_range_all_is_capped():
+    user_budget = budget.empty_budget()
+    budget.add_item(user_budget, "2020-01", "income", "Job", "100")
+    assert budget.history_range(user_budget, "All", "2026-11") == ("2026-11", budget.MAX_HISTORY_MONTHS)
+
+
+def test_top_items_largest_first_and_limited():
+    user_budget = make_budget()
+    budget.add_item(user_budget, "2026-09", "necessities", "Car repair", "900")
+    items = budget.top_items(user_budget, ["2026-09", "2026-10"], "necessities", limit=2)
+    assert items == [("Rent", "2026-10", 120000), ("Car repair", "2026-09", 90000)]
+
+
+def test_fill_sample_months_only_fills_empty_earlier_months():
+    user_budget = make_budget()  # October has real data
+    assert budget.fill_sample_months(user_budget, "2026-11") == 4
+    assert budget.get_month(user_budget, "2026-10")["income"][0]["name"] == "Salary"
+    assert "2026-11" not in user_budget["months"]
+    assert all(item["name"].endswith(budget.SAMPLE_TAG) for item in budget.get_month(user_budget, "2026-06")["income"])
+    assert budget.fill_sample_months(user_budget, "2026-11") == 0
+    assert budget.months_with_data(user_budget) == 5
+
+
 # ---------- storage.py ----------
 
 @pytest.fixture(autouse=True)

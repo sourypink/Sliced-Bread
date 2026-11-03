@@ -205,3 +205,87 @@ def month_name(key):
 def month_label(key):
     """'October 2026' for '2026-10'."""
     return f"{month_name(key)} {key.split('-')[0]}"
+
+
+# ---------- History ----------
+
+HISTORY_RANGES = {"6 months": 6, "12 months": 12}  # "All" is the third choice, from the first month with data
+MAX_HISTORY_MONTHS = 24  # columns stay readable up to two years
+SAMPLE_TAG = " (sample)"
+
+# Five believable earlier months for demos, oldest first: (section, name, dollars).
+SAMPLE_MONTHS = [
+    [("income", "Salary", 3000), ("necessities", "Rent", 1200), ("necessities", "Groceries", 340),
+     ("necessities", "Gas", 110), ("discretionary", "Streaming", 28), ("discretionary", "Dinner out", 90)],
+    [("income", "Salary", 3000), ("income", "Freelance", 250), ("necessities", "Rent", 1200),
+     ("necessities", "Groceries", 365), ("necessities", "Gas", 95), ("discretionary", "Concert tickets", 140),
+     ("discretionary", "Streaming", 28)],
+    [("income", "Salary", 3000), ("necessities", "Rent", 1200), ("necessities", "Groceries", 410),
+     ("necessities", "Gas", 120), ("discretionary", "Streaming", 28), ("travel", "Flights", 380),
+     ("travel", "Hotel", 420), ("travel", "Food on the trip", 160)],
+    [("income", "Salary", 3000), ("income", "Freelance", 400), ("necessities", "Rent", 1200),
+     ("necessities", "Groceries", 350), ("necessities", "Gas", 105), ("discretionary", "Video game", 70),
+     ("discretionary", "Streaming", 28)],
+    [("income", "Salary", 3000), ("necessities", "Rent", 1200), ("necessities", "Groceries", 375),
+     ("necessities", "Gas", 115), ("discretionary", "Movies", 45), ("discretionary", "Streaming", 28),
+     ("travel", "Weekend train", 90)],
+]
+
+
+def month_history(budget, end_key, count):
+    """One row per month, oldest first, ending at end_key. Months with nothing entered are zeros."""
+    rows = []
+    for steps in range(count - 1, -1, -1):
+        key = shift_month(end_key, -steps)
+        month = get_month(budget, key)
+        rows.append({
+            "key": key,
+            "label": month_name(key)[:3],
+            "income": section_total(month, "income"),
+            "spent": total_expenses(month),
+            "left": leftover(month),
+            "sections": {section: section_total(month, section) for section in EXPENSE_SECTIONS},
+        })
+    return rows
+
+
+def history_range(budget, choice, today_key):
+    """The (end_key, count) a range choice covers. 'All' runs from the first month with data to today."""
+    if choice in HISTORY_RANGES:
+        return today_key, HISTORY_RANGES[choice]
+    keys = [key for key, month in budget["months"].items() if any(month.values()) and key <= today_key]
+    if not keys:
+        return today_key, 1
+    first = min(keys)
+    first_year, first_month = (int(part) for part in first.split("-"))
+    year, month = (int(part) for part in today_key.split("-"))
+    span = (year - first_year) * 12 + (month - first_month) + 1
+    return today_key, min(span, MAX_HISTORY_MONTHS)
+
+
+def months_with_data(budget):
+    """How many months have at least one line."""
+    return sum(1 for month in budget["months"].values() if any(month.values()))
+
+
+def top_items(budget, keys, section, limit=5):
+    """The biggest lines in a section across the given months: (name, month_key, cents), largest first."""
+    items = [
+        (item["name"], key, item["amount"])
+        for key in keys
+        for item in get_month(budget, key)[section]
+    ]
+    return sorted(items, key=lambda item: item[2], reverse=True)[:limit]
+
+
+def fill_sample_months(budget, current_key):
+    """Fill the five months before current_key with sample lines, skipping any that already have data."""
+    filled = 0
+    for steps, lines in zip(range(len(SAMPLE_MONTHS), 0, -1), SAMPLE_MONTHS):
+        key = shift_month(current_key, -steps)
+        if any(get_month(budget, key).values()):
+            continue
+        for section, name, dollars in lines:
+            add_item(budget, key, section, name + SAMPLE_TAG, str(dollars))
+        filled += 1
+    return filled

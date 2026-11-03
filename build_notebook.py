@@ -10,6 +10,7 @@ SOURCE_FILES = [
     ("budget.py", "The math: totals, what is left to invest, limit and target alerts, input checks. No Gradio here."),
     ("storage.py", "Accounts (salted, hashed passwords) and saving each user's budget as a JSON file."),
     ("design.py", "Toast, the design system: colours, type sizes, spacing, the Gradio theme and the CSS."),
+    ("charts.py", "The History tab's chart, tiles and table, built from plain HTML so labels stay readable on a phone."),
     ("app.py", "The Gradio screens: sign in, the Budget tab and the Account tab. The only file that uses Gradio."),
     ("test_budget.py", "Automated tests for budget.py and storage.py."),
 ]
@@ -39,7 +40,7 @@ import sys
 import gradio as gr
 
 gr.close_all()  # stop a copy started earlier in this session
-for module in ("budget", "storage", "design", "app"):
+for module in ("budget", "storage", "design", "charts", "app"):
     sys.modules.pop(module, None)  # re-import so edits to the cells above take effect
 
 import app

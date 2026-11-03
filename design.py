@@ -26,14 +26,16 @@ HOVER = "#F0EDE7"  # neutral hover for quiet icon buttons
 WARN = "#D99A00"  # meter 90-100% (fill only, never text)
 OVER = "#B42318"  # meter over 100%, "Over budget" text
 
-# Fills only (section dots, the stacked bar), never text.
+# Fills only (section dots, bars, chart columns), never text. Checked with the dataviz palette validator:
+# all pairs pass lightness, chroma, colour-blind and normal-vision separation on white (2026-11-03).
 SECTION_COLORS = {
-    "income": INK,
-    "necessities": "#3B6FB5",
-    "discretionary": "#8E4FA8",
-    "travel": "#1E8C93",
+    "income": ACCENT,
+    "necessities": "#2A78D6",
+    "discretionary": "#EB6834",
+    "travel": "#1BAF7A",
     "investments": ACCENT,
 }
+MUTED_FILL = "#D9D4CA"  # the categories you didn't pick, when the History chart zooms in on one
 METER_COLORS = {"good": ACCENT, "warn": WARN, "over": OVER}
 
 # The mallard's own colours. Duck only; never used for UI.
@@ -268,6 +270,71 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
 }}
 .tab-container button.selected {{ background: var(--sb-card) !important; color: var(--sb-ink) !important; box-shadow: 0 1px 3px rgb(28 27 24 / 0.12); }}
 .tab-container button::after, .tab-container button.selected::after {{ display: none !important; }}
+
+/* Filter pills: a Gradio radio styled like the tab switcher. */
+/* One line always; on a narrow screen the row scrolls sideways inside itself rather than wrapping. */
+.sb-pills .wrap {{
+  display: flex; flex-wrap: nowrap; gap: 4px; padding: 4px; border-radius: 999px; background: var(--sb-paper-deep);
+  width: max-content; max-width: 100%; overflow-x: auto; scrollbar-width: none;
+}}
+.sb-pills .wrap::-webkit-scrollbar {{ display: none; }}
+.sb-pills label {{ flex: none; white-space: nowrap; }}
+.sb-pills label {{
+  margin: 0 !important; padding: 7px 16px !important; border: none !important; border-radius: 999px !important; background: transparent !important;
+  font-size: 14px !important; font-weight: 600; color: var(--sb-muted) !important; box-shadow: none !important; cursor: pointer;
+}}
+.sb-pills label.selected {{ background: var(--sb-card) !important; color: var(--sb-ink) !important; box-shadow: 0 1px 3px rgb(28 27 24 / 0.12) !important; }}
+.sb-pills input[type=radio] {{ display: none !important; }}
+.sb-pills label > span {{ margin: 0 !important; }}
+
+/* History: stat tiles, the column chart, its legend and table. */
+.sb-tiles {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }}
+.sb-tile {{ background: var(--sb-card); border: 1px solid var(--sb-line); border-radius: 16px; padding: 14px 16px; }}
+.sb-tile-value {{ font-size: 24px; font-weight: 600; margin-top: 4px; letter-spacing: -0.01em; }}
+.sb-tile-value.sb-over {{ color: var(--sb-over); }}
+@media (max-width: 480px) {{
+  .sb-tiles {{ gap: 8px; }}
+  .sb-tile {{ padding: 12px; }}
+  .sb-tile-value {{ font-size: 18px; }}
+}}
+.sb-chart {{ margin-top: 20px; }}
+.sb-plot {{ position: relative; height: 220px; margin: 8px 0 0 52px; }}
+.sb-grid {{ position: absolute; left: 0; right: 0; border-top: 1px solid var(--sb-line); }}
+.sb-grid > span {{
+  position: absolute; right: calc(100% + 8px); transform: translateY(-50%); font-size: 12px; color: var(--sb-muted);
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}}
+.sb-cols {{ position: absolute; inset: 0; display: grid; align-items: end; }}
+.sb-month-col {{ display: flex; justify-content: center; align-items: flex-end; gap: 2px; height: 100%; min-width: 0; }}
+.sb-stack {{ position: relative; width: 24px; max-width: 42%; display: flex; flex-direction: column-reverse; gap: 2px; }}
+.sb-seg {{ min-height: 2px; outline-offset: 1px; }}
+.sb-seg-top {{ border-radius: 4px 4px 0 0; }}
+.sb-seg:hover, .sb-seg:focus-visible {{ filter: brightness(1.12); }}
+.sb-col-label {{
+  position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 6px;
+  font-size: 14px; font-weight: 600; white-space: nowrap;
+}}
+.sb-xaxis {{ display: grid; margin: 8px 0 0 52px; font-size: 12px; color: var(--sb-muted); text-align: center; }}
+.sb-xaxis span {{ white-space: nowrap; }}
+.sb-hide-desktop {{ visibility: hidden; }}
+@media (max-width: 480px) {{
+  .sb-hide-desktop {{ visibility: visible; }}
+  .sb-hide-phone {{ visibility: hidden; }}
+}}
+.sb-legend {{ display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 16px; font-size: 14px; color: var(--sb-muted); }}
+.sb-legend i {{ display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }}
+.sb-details {{ margin-top: 16px; border-top: 1px solid var(--sb-line); padding-top: 12px; }}
+.sb-details summary {{ cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sb-accent-dark); }}
+.sb-table, .sb-table tr {{ border: none !important; }}
+.sb-table {{ width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; font-variant-numeric: tabular-nums; }}
+.sb-table th, .sb-table td {{ text-align: right !important; padding: 8px 4px !important; border: none !important; border-bottom: 1px solid var(--sb-line) !important; background: none !important; }}
+.sb-table th {{ color: var(--sb-muted); font-weight: 500; }}
+.sb-table th:first-child, .sb-table td:first-child {{ text-align: left !important; }}
+.sb-top-items {{ margin-top: 8px; }}
+.sb-item-row {{
+  display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: baseline; padding: 10px 0;
+  border-top: 1px solid var(--sb-line); font-size: 16px;
+}}
 
 /* Sign in: the full mallard on top, everything centred. */
 .sb-auth {{ max-width: 440px; margin: 24px auto 0 !important; }}
