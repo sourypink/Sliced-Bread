@@ -6,14 +6,17 @@ like 50/30/20, and tracks a savings goal.
 
 ## Run it in Google Colab
 
-1. In Colab: File > Open notebook > GitHub, paste `sourypink/Sliced-Bread`, open `run_in_colab.ipynb`.
-2. Run cell 1, then cell 2. Open the `gradio.live` link cell 2 prints.
+1. In Colab: File > Open notebook > GitHub, paste `sourypink/Sliced-Bread`, open `Sliced_Bread.ipynb`.
+2. Runtime > Run all. The app appears inside the last cell, with a public `gradio.live` link above it.
 
-Colab forgets files when the runtime resets. To keep accounts between sessions, run the optional Google
-Drive cell before cell 2.
+The notebook holds every source file as a visible cell, so it is also the copy to hand in.
 
-**Workflow:** GitHub holds the code. Edit there (or locally) and push; in Colab, stop cell 2 and run
-both cells again. Edits made only inside Colab are lost on reset.
+Colab forgets files when the runtime resets. To keep accounts between sessions, uncomment the Google
+Drive cell before running the last cell.
+
+**Workflow:** the `.py` files in this repo are the source. After changing one, run
+`python build_notebook.py` to rebuild `Sliced_Bread.ipynb`, then commit both. Edits made only inside
+Colab are lost unless you copy them back into the `.py` file.
 
 ## Run it on your computer
 
@@ -39,6 +42,8 @@ python -m pytest
 | `storage.py` | Accounts (salted, hashed passwords) and saving each user's budget as JSON. |
 | `design.py` | "Toast", the design system: colours, type, spacing, the Gradio theme and CSS. |
 | `test_budget.py` | Tests for `budget.py` and `storage.py`. |
+| `build_notebook.py` | Rebuilds `Sliced_Bread.ipynb` from the files above. |
+| `Sliced_Bread.ipynb` | The Colab notebook: all the code, the tests and the running app. |
 | `PLAN.md` | The plan: features, screens, design system, timeline and roles. |
 
 Money is stored in whole cents so totals never drift. Investments aren't stored: they're always income
