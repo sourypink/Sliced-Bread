@@ -1,13 +1,18 @@
 # Sliced Bread
 
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/sourypink/Sliced-Bread/blob/main/Sliced_Bread.ipynb)
+
 A personal budget tracker in Python and Gradio. Add your income and spending; it tells you how much is
 left to invest each month, warns you near and over your limits, checks your split against targets
 like 50/30/20, and tracks a savings goal.
 
 ## Run it in Google Colab
 
-1. In Colab: File > Open notebook > GitHub, paste `sourypink/Sliced-Bread`, open `Sliced_Bread.ipynb`.
+1. Click **Open in Colab** at the top of this page. It always opens the latest version from GitHub.
 2. Runtime > Run all. The app appears inside the last cell, with a public `gradio.live` link above it.
+
+After a push, open the link again rather than re-running a Colab tab you already had open: that tab keeps the
+old copy. If Colab still shows old code, use Runtime > Disconnect and delete runtime first.
 
 The notebook holds every source file as a visible cell, so it is also the copy to hand in.
 
