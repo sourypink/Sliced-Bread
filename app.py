@@ -39,31 +39,56 @@ def fail(message):
 # ---------- Page pieces ----------
 
 def header_html(display_name):
-    return f'<div class="sb-head"><div class="sb-brand">Sliced Bread</div><div class="sb-note">Hi, {escape(display_name)}</div></div>'
+    """Logo and wordmark on the left, the signed-in name and its initial on the right."""
+    return (
+        f'<div class="sb-header"><div class="sb-brand">{design.duck_mark(36)}<span class="sb-wordmark">Sliced Bread</span></div>'
+        f'<div class="sb-person"><span>{escape(display_name)}</span>'
+        f'<span class="sb-avatar">{escape(display_name[:1].upper())}</span></div></div>'
+    )
+
+
+def month_title_html(key):
+    return f'<div class="sb-month-label">{budget.month_label(key)}</div>'
+
+
+def duck_line(user_budget, key):
+    """What the duck says under the hero: one line picked from the month's state. The mascot's only job for now."""
+    month = budget.get_month(user_budget, key)
+    if budget.section_total(month, "income") == 0:
+        return "Add your income and I'll do the math."
+    left = budget.leftover(month)
+    if left < 0:
+        return "Quack. Spending is over income this month."
+    meters = watched_meters(user_budget, key)
+    for label, result in meters.items():
+        if result["state"] == "over":
+            return f"Heads up: {label.lower()} is {result['label'].lower()}."
+    for label, result in meters.items():
+        if result["state"] == "warn":
+            return f"Careful, {label.lower()} is near its limit."
+    return f"Nice. {budget.format_money(left)} can go to work."
 
 
 def hero_html(user_budget, key):
-    """The one hero line plus where the money went."""
+    """The big number, where the money went, and the duck."""
     month = budget.get_month(user_budget, key)
     income = budget.section_total(month, "income")
     expenses = budget.total_expenses(month)
     left = budget.leftover(month)
     name = budget.month_name(key)
 
-    if income == 0 and expenses == 0:
-        return f'<div class="sb-hero">Add your income to plan {name}</div>'
     if left >= 0:
-        title = f'<div class="sb-hero">{design.money(left)} left to invest in {name}</div>'
+        top = f'<div class="sb-eyebrow">Left to invest in {name}</div><div class="sb-hero-amount">{budget.format_money(left)}</div>'
     else:
-        title = f'<div class="sb-hero sb-over">Over budget by {design.money(-left)} in {name}</div>'
+        top = f'<div class="sb-eyebrow">Over budget in {name}</div><div class="sb-hero-amount sb-over">{budget.format_money(-left)}</div>'
 
     amounts = {section: budget.section_total(month, section) for section in budget.EXPENSE_SECTIONS}
     amounts["investments"] = max(left, 0)
     whole = max(income, expenses)
     segments = "".join(
-        f'<span style="width:{cents / whole * 100:.2f}%;background:{design.SECTION_COLORS[section]}"></span>'
+        f'<span style="flex:{cents / whole:.4f};background:{design.SECTION_COLORS[section]}"></span>'
         for section, cents in amounts.items() if cents
-    )
+    ) or '<span class="sb-bar-empty"></span>'
     key_items = "".join(
         f"<span>{design.dot(section)}{SECTION_NAMES[section]} {design.money(cents)}</span>"
         for section, cents in amounts.items() if cents
@@ -72,36 +97,41 @@ def hero_html(user_budget, key):
     limit_meter = design.meter_html(
         budget.meter(expenses, limit), f"Spent {budget.format_money(expenses)} of {budget.format_money(limit)}"
     )
-    return f'{title}<div class="sb-bar">{segments}</div><div class="sb-key">{key_items}</div>' + (
-        f'<div style="margin-top:16px">{limit_meter}</div>' if limit_meter else ""
+    duck = (
+        f'<div class="sb-duck-says"><span class="sb-bob">{design.duck_mark(44)}</span>'
+        f'<div class="sb-bubble">{escape(duck_line(user_budget, key))}</div></div>'
+    )
+    return (
+        f'{top}<div class="sb-bar">{segments}</div><div class="sb-key">{key_items}</div>'
+        + (f'<div style="margin-top:16px">{limit_meter}</div>' if limit_meter else "")
+        + duck
     )
 
 
 def section_head_html(user_budget, month, section):
     total = budget.section_total(month, section)
     limit = user_budget["settings"]["limits"].get(section, 0)
-    amount = design.money(total)
-    if limit:
-        amount = f'<span class="sb-money">{budget.format_money(total)} of {budget.format_money(limit)}</span>'
-    return f'<div class="sb-head"><div class="sb-title">{design.dot(section)}{SECTION_NAMES[section]}</div>{amount}</div>'
+    of_limit = f'<span class="sb-note">of {budget.format_money(limit)}</span>' if limit else ""
+    return (
+        f'<div class="sb-head"><div class="sb-title">{design.dot(section)}{SECTION_NAMES[section]}</div>'
+        f'<div class="sb-head-total">{design.money(total)}{of_limit}</div></div>'
+    )
 
 
 def investments_html(user_budget, key):
     left = budget.leftover(budget.get_month(user_budget, key))
-    head = (
-        f'<div class="sb-head"><div class="sb-title">{design.dot("investments")}Investments</div>'
-        f"{design.money(max(left, 0))}</div>"
-    )
+    head = f'<div class="sb-title">{design.dot("investments")}Investments</div>'
+    amount = f'<div class="sb-big" style="margin-top:12px">{budget.format_money(max(left, 0))}</div>'
     if left < 0:
         note = f'<div class="sb-note" style="color:var(--sb-over)">Over budget by {budget.format_money(-left)}. Nothing left to invest.</div>'
     else:
-        note = '<div class="sb-note">Whatever is left after spending goes here.</div>'
+        note = '<div class="sb-note">Whatever is left after spending lands here.</div>'
     goal = user_budget["settings"]["savings_goal"]
     if goal:
         savings = design.progress_html(budget.savings_progress(user_budget), goal)
     else:
         savings = '<div class="sb-note">Set a savings goal on the Account tab.</div>'
-    return f'{head}{note}<div style="margin-top:8px">{savings}</div>'
+    return f'{head}{amount}<div style="margin-top:6px">{note}</div><div style="margin-top:16px">{savings}</div>'
 
 
 def split_html(user_budget, month):
@@ -272,24 +302,32 @@ with gr.Blocks(title="Sliced Bread") as demo:
     open_state = gr.State(None)  # ("add", section) or ("edit", section, index): the one open form
 
     # Sign in: demo mode, any name and password work
-    with gr.Column(elem_classes="sb-card") as auth_view:
+    with gr.Column(elem_classes="sb-card sb-auth") as auth_view:
         html(
-            '<div class="sb-brand">Sliced Bread</div><div class="sb-subtitle">Know what is left to invest each month</div>'
-            '<span class="sb-chip">Demo: any name and password work</span>'
+            f'<div class="sb-auth-top">{design.duck_full(200)}<div class="sb-wordmark">Sliced Bread</div>'
+            '<div class="sb-note">Know what is left to invest each month</div>'
+            '<span class="sb-chip">Demo: any name and password work</span></div>'
         )
         login_username = gr.Textbox(label="Name", placeholder="Your name", html_attributes=gr.InputHTMLAttributes(autocomplete="username"))
         login_password = gr.Textbox(label="Password", type="password", placeholder="Anything", html_attributes=gr.InputHTMLAttributes(autocomplete="current-password"))
-        login_button = gr.Button("Sign in", variant="primary")
+        login_button = gr.Button("Sign in", variant="primary", elem_classes="sb-full")
 
     with gr.Column(visible=False) as app_view:
-        greeting = html("", elem_classes="sb-header")
+        greeting = html("")
 
         with gr.Tabs() as app_tabs:
             with gr.Tab("Budget", id="budget"):
-                with gr.Row(elem_classes="sb-month"):
-                    previous_month = gr.Button("‹", elem_classes="sb-nav", min_width=0, scale=0)
-                    month_title = html("", elem_classes="sb-grow")
-                    next_month = gr.Button("›", elem_classes="sb-nav", min_width=0, scale=0)
+                # The hero card: month switcher on top, then the big number, the bar and the duck.
+                with gr.Column(elem_classes="sb-card"):
+                    with gr.Row(elem_classes="sb-hero-top"):
+                        previous_month = gr.Button("‹", elem_classes="sb-icon sb-nav", min_width=0, scale=0)
+                        month_title = html("", elem_classes="sb-grow")
+                        next_month = gr.Button("›", elem_classes="sb-icon sb-nav", min_width=0, scale=0)
+
+                    @gr.render(inputs=[budget_state, month_state], triggers=[budget_state.change, month_state.change])
+                    def render_hero(user_budget, key):
+                        if user_budget:
+                            html(hero_html(user_budget, key))
 
                 @gr.render(inputs=[budget_state, month_state, open_state], triggers=[budget_state.change, month_state.change, open_state.change])
                 def render_budget(user_budget, key, open_section):
@@ -297,8 +335,6 @@ with gr.Blocks(title="Sliced Bread") as demo:
                         return
                     month = budget.get_month(user_budget, key)
                     opened = tuple(open_section) if open_section else None
-                    with gr.Column(elem_classes="sb-card"):
-                        html(hero_html(user_budget, key))
                     split = split_html(user_budget, month)
                     if split:
                         with gr.Column(elem_classes="sb-card"):
@@ -309,7 +345,10 @@ with gr.Blocks(title="Sliced Bread") as demo:
                         with gr.Column(elem_classes="sb-card"):
                             with gr.Row(elem_classes="sb-row"):
                                 html(section_head_html(user_budget, month, section), elem_classes="sb-grow")
-                                plus = gr.Button("−" if is_open else "+", variant="primary", elem_classes="sb-plus", min_width=0, scale=0)
+                                plus = gr.Button(
+                                    "Close" if is_open else "+ Add", variant="secondary" if is_open else "primary",
+                                    elem_classes="sb-add-button", min_width=0, scale=0,
+                                )
                                 plus.click(make_toggle(section), inputs=open_state, outputs=open_state)
 
                             limit = user_budget["settings"]["limits"].get(section, 0)
@@ -318,7 +357,7 @@ with gr.Blocks(title="Sliced Bread") as demo:
                                 html(meter)
 
                             if is_open:
-                                with gr.Column(elem_classes="sb-add"):
+                                with gr.Column(elem_classes="sb-panel"):
                                     with gr.Row(elem_classes="sb-row"):
                                         name_box = gr.Textbox(label="Name", placeholder=NAME_PLACEHOLDERS[section], autofocus=True, scale=3, min_width=0)
                                         amount_box = gr.Textbox(label="Amount", placeholder="0.00", scale=2, min_width=0)
@@ -335,7 +374,7 @@ with gr.Blocks(title="Sliced Bread") as demo:
                                 html(f'<div class="sb-note">{EMPTY_STATES[section]}</div>')
                             for index, item in enumerate(items):
                                 if opened == ("edit", section, index):
-                                    with gr.Column(elem_classes="sb-add"):
+                                    with gr.Column(elem_classes="sb-panel"):
                                         with gr.Row(elem_classes="sb-row"):
                                             edit_name = gr.Textbox(label="Name", value=item["name"], autofocus=True, scale=3, min_width=0)
                                             edit_amount = gr.Textbox(label="Amount", value=dollars_text(item["amount"]), scale=2, min_width=0)
@@ -349,12 +388,12 @@ with gr.Blocks(title="Sliced Bread") as demo:
                                     continue
                                 with gr.Row(elem_classes="sb-row sb-item"):
                                     html(design.line_html(item["name"], item["amount"]), elem_classes="sb-grow")
-                                    edit = gr.Button("✎", elem_classes="sb-x", min_width=0, scale=0)
+                                    edit = gr.Button("✎", elem_classes="sb-icon", min_width=0, scale=0)
                                     edit.click(make_open(("edit", section, index)), outputs=open_state)
-                                    remove = gr.Button("✕", elem_classes="sb-x", min_width=0, scale=0)
+                                    remove = gr.Button("✕", elem_classes="sb-icon", min_width=0, scale=0)
                                     remove.click(make_remove(section, index), inputs=[user_state, budget_state, month_state, open_state], outputs=[budget_state, open_state])
 
-                    with gr.Column(elem_classes="sb-card"):
+                    with gr.Column(elem_classes="sb-card sb-card-accent"):
                         html(investments_html(user_budget, key))
 
             with gr.Tab("Account", id="account"):
@@ -382,7 +421,7 @@ with gr.Blocks(title="Sliced Bread") as demo:
                         use_rule_button = gr.Button("Use 50/30/20")
                         save_targets_button = gr.Button("Save targets", variant="primary")
 
-                with gr.Column(elem_classes="sb-card"):
+                with gr.Column(elem_classes="sb-card sb-danger"):
                     sign_out_button = gr.Button("Sign out")
                     delete_button = gr.Button("Delete my data", variant="stop")
                     with gr.Column(visible=False) as delete_confirm:
@@ -401,8 +440,8 @@ with gr.Blocks(title="Sliced Bread") as demo:
     for trigger in (login_button.click, login_username.submit, login_password.submit):
         trigger(sign_in, inputs=login_username, outputs=signed_in_outputs)
 
-    month_state.change(lambda key: f'<div class="sb-title">{budget.month_label(key)}</div>', inputs=month_state, outputs=month_title)
-    demo.load(lambda key: f'<div class="sb-title">{budget.month_label(key)}</div>', inputs=month_state, outputs=month_title)
+    month_state.change(month_title_html, inputs=month_state, outputs=month_title)
+    demo.load(month_title_html, inputs=month_state, outputs=month_title)
     previous_month.click(lambda key: (budget.shift_month(key, -1), None), inputs=month_state, outputs=[month_state, open_state])
     next_month.click(lambda key: (budget.shift_month(key, 1), None), inputs=month_state, outputs=[month_state, open_state])
 
@@ -417,4 +456,4 @@ with gr.Blocks(title="Sliced Bread") as demo:
 
 
 if __name__ == "__main__":
-    demo.launch(theme=design.build_theme(), css=design.CSS, share="--share" in sys.argv)  # Colab needs the public link
+    demo.launch(theme=design.build_theme(), css=design.CSS, head=design.HEAD, share="--share" in sys.argv)  # Colab needs the public link

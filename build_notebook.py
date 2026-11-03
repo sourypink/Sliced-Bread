@@ -45,7 +45,7 @@ for module in ("budget", "storage", "design", "app"):
 import app
 import design
 
-app.demo.launch(theme=design.build_theme(), css=design.CSS, share=True, height={PREVIEW_HEIGHT})"""
+app.demo.launch(theme=design.build_theme(), css=design.CSS, head=design.HEAD, share=True, height={PREVIEW_HEIGHT})"""
 
 
 def markdown(text):

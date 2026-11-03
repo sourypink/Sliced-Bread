@@ -1,7 +1,7 @@
-"""Toast, the Sliced Bread design system: tokens, the Gradio theme and the CSS. See PLAN.md section 5.
+"""Pond, the Sliced Bread design system: tokens, the Gradio theme, the CSS and the mallard. See PLAN.md section 5.
 
-The one rule: crust means "you can press it". Crust marks controls only, never money or status.
-Nothing in app.py sets a colour or size by hand; it uses the classes defined here.
+The one rule: green is the app's colour. It marks what you can press and spending that is on track.
+Amber means near a limit, red means over. Nothing in app.py sets a colour or size by hand.
 """
 
 import html
@@ -12,17 +12,17 @@ import budget
 
 # ---------- Tokens ----------
 
-PAPER = "#F3F0EA"  # page background, a shade darker than cards so they stand off it
-PAPER_DEEP = "#E8E3DA"  # the tab switcher's track
-CARD = "#FFFFFF"  # section cards
-INK = "#1F1D1A"  # all text, all money
-MUTED = "#6B655C"  # secondary labels, 5:1 on paper
-LINE = "#DCD5C9"  # card borders, dividers, empty meter track
+PAPER = "#F4F2ED"  # page background, a shade darker than cards so they stand off it
+PAPER_DEEP = "#E9E5DD"  # the tab switcher's track
+CARD = "#FFFFFF"  # cards
+INK = "#1C1B18"  # all text, all money
+MUTED = "#6B665D"  # labels, 5:1 on paper
+LINE = "#E2DDD3"  # card borders, dividers, empty meter track
 FIELD_BORDER = "#958D81"  # text box borders, 3.3:1 on white so a box reads as a box
-CRUST = "#9A5B1E"  # controls and focus ring; white text on it is 5.4:1
-CRUST_DARK = "#7E4916"  # control hover
-CRUST_SOFT = "#F6EBDD"  # wash behind the open add row
-GOOD = "#2F7D4F"  # meter under 90%, savings bar
+ACCENT = "#1F7A4D"  # mallard green: buttons, focus, on-track meters; white text on it is 5.3:1
+ACCENT_DARK = "#17603C"  # button hover
+ACCENT_SOFT = "#E7F1EA"  # add/edit panel, Investments card wash
+HOVER = "#F0EDE7"  # neutral hover for quiet icon buttons
 WARN = "#D99A00"  # meter 90-100% (fill only, never text)
 OVER = "#B42318"  # meter over 100%, "Over budget" text
 
@@ -32,18 +32,32 @@ SECTION_COLORS = {
     "necessities": "#3B6FB5",
     "discretionary": "#8E4FA8",
     "travel": "#1E8C93",
-    "investments": GOOD,
+    "investments": ACCENT,
 }
-METER_COLORS = {"good": GOOD, "warn": WARN, "over": OVER}
+METER_COLORS = {"good": ACCENT, "warn": WARN, "over": OVER}
 
-FONT_TEXT = "Inter"
-FONT_MONEY = "JetBrains Mono"
+# The mallard's own colours. Duck only; never used for UI.
+DUCK_HEAD = "#1D6B47"
+DUCK_BILL = "#E8B931"
+DUCK_BREAST = "#7A3E1D"
+DUCK_BODY = "#B9B3A8"
+
+FONT_TEXT = "Geist"
+FONT_DISPLAY = "Instrument Serif"
 PAGE_MAX_WIDTH = "640px"
 
-# Crust and paper as Gradio colour ramps, so built-in components pick them up.
-CRUST_RAMP = gr.themes.Color(
-    c50="#FBF4EA", c100=CRUST_SOFT, c200="#EBD3B5", c300="#DDB58A", c400="#C88F58", c500="#B07235",
-    c600=CRUST, c700=CRUST_DARK, c800="#633912", c900="#4A2B0E", c950="#2E1B09", name="crust",
+# Loaded in <head> so both faces are ready before first paint.
+HEAD = (
+    '<link rel="preconnect" href="https://fonts.googleapis.com">'
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&'
+    'family=Instrument+Serif:ital@0;1&display=swap">'
+)
+
+# Green and paper as Gradio colour ramps, so built-in components pick them up.
+ACCENT_RAMP = gr.themes.Color(
+    c50="#F2F8F4", c100=ACCENT_SOFT, c200="#C5DFCF", c300="#94C4A6", c400="#5BA37A", c500="#2F8A5B",
+    c600=ACCENT, c700=ACCENT_DARK, c800="#124A2F", c900="#0D3622", c950="#082416", name="accent",
 )
 PAPER_RAMP = gr.themes.Color(
     c50=PAPER, c100=PAPER_DEEP, c200=LINE, c300="#C9C1B4", c400=FIELD_BORDER, c500="#7D776D",
@@ -54,12 +68,11 @@ PAPER_RAMP = gr.themes.Color(
 def build_theme():
     """The Gradio theme. Light only: every dark-mode value is copied from its light twin."""
     theme = gr.themes.Base(
-        primary_hue=CRUST_RAMP,
-        secondary_hue=CRUST_RAMP,
+        primary_hue=ACCENT_RAMP,
+        secondary_hue=ACCENT_RAMP,
         neutral_hue=PAPER_RAMP,
-        font=[gr.themes.GoogleFont(FONT_TEXT), "ui-sans-serif", "system-ui", "sans-serif"],
-        font_mono=[gr.themes.GoogleFont(FONT_MONEY), "ui-monospace", "Consolas", "monospace"],
-        radius_size=gr.themes.sizes.radius_md,
+        font=[FONT_TEXT, "ui-sans-serif", "system-ui", "sans-serif"],
+        font_mono=["ui-monospace", "Consolas", "monospace"],
         text_size=gr.themes.sizes.text_md,
     ).set(
         body_background_fill=PAPER,
@@ -68,6 +81,9 @@ def build_theme():
         background_fill_primary=CARD,
         background_fill_secondary=PAPER,
         border_color_primary=LINE,
+        border_color_accent=LINE,
+        color_accent=ACCENT,
+        color_accent_soft=ACCENT_SOFT,
         block_background_fill=CARD,
         block_border_color=LINE,
         block_border_width="0px",
@@ -81,28 +97,34 @@ def build_theme():
         input_border_width="1px",
         input_border_color=FIELD_BORDER,
         input_border_color_hover=INK,
-        input_border_color_focus=CRUST,
+        input_border_color_focus=ACCENT,
         input_shadow="none",
-        input_shadow_focus=f"0 0 0 3px {CRUST_SOFT}",
-        input_radius="8px",
-        input_padding="10px 12px",
+        input_shadow_focus="none",
+        input_radius="12px",
+        input_padding="12px 14px",
         input_text_size="16px",
-        button_large_radius="8px",
-        button_small_radius="8px",
+        button_large_radius="999px",
+        button_small_radius="999px",
+        button_large_padding="12px 22px",
         button_large_text_size="16px",
         button_large_text_weight="600",
         button_border_width="1px",
-        button_primary_background_fill=CRUST,
-        button_primary_background_fill_hover=CRUST_DARK,
+        **{f"button_{kind}_shadow{state}": "none" for kind in ("primary", "secondary", "cancel") for state in ("", "_hover", "_active")},
+        layout_gap="16px",
+        button_primary_background_fill=ACCENT,
+        button_primary_background_fill_hover=ACCENT_DARK,
         button_primary_text_color="#FFFFFF",
-        button_primary_border_color=CRUST,
+        button_primary_border_color=ACCENT,
+        button_primary_border_color_hover=ACCENT_DARK,
         button_secondary_background_fill=CARD,
-        button_secondary_background_fill_hover=CRUST_SOFT,
+        button_secondary_background_fill_hover=HOVER,
         button_secondary_text_color=INK,
         button_secondary_border_color=LINE,
-        button_cancel_background_fill=OVER,
-        button_cancel_background_fill_hover="#8F1C13",
-        button_cancel_text_color="#FFFFFF",
+        button_secondary_border_color_hover=FIELD_BORDER,
+        button_cancel_background_fill=CARD,
+        button_cancel_background_fill_hover="#FBEDEB",
+        button_cancel_text_color=OVER,
+        button_cancel_border_color="#E8B4AE",
     )
     for name in list(vars(theme)):
         if name.endswith("_dark"):
@@ -112,45 +134,128 @@ def build_theme():
 
 CSS = f"""
 :root {{
-  --sb-paper: {PAPER}; --sb-paper-deep: {PAPER_DEEP}; --sb-card: {CARD}; --sb-ink: {INK}; --sb-muted: {MUTED}; --sb-line: {LINE};
-  --sb-crust: {CRUST}; --sb-crust-dark: {CRUST_DARK}; --sb-crust-soft: {CRUST_SOFT};
-  --sb-over: {OVER};
-  --sb-money: '{FONT_MONEY}', ui-monospace, Consolas, monospace;
+  --sb-paper: {PAPER}; --sb-paper-deep: {PAPER_DEEP}; --sb-card: {CARD}; --sb-ink: {INK}; --sb-muted: {MUTED};
+  --sb-line: {LINE}; --sb-accent: {ACCENT}; --sb-accent-dark: {ACCENT_DARK}; --sb-accent-soft: {ACCENT_SOFT};
+  --sb-hover: {HOVER}; --sb-over: {OVER};
+  --sb-serif: '{FONT_DISPLAY}', Georgia, 'Times New Roman', serif;
+  --sb-sans: '{FONT_TEXT}', ui-sans-serif, system-ui, sans-serif;
 }}
 
 /* One centred column, phone first. */
-.gradio-container {{ width: 100% !important; max-width: {PAGE_MAX_WIDTH} !important; margin: 0 auto !important; padding: 16px !important; }}
-.gradio-container .main {{ padding: 0 !important; }}
-footer {{ display: none !important; }}
-:focus-visible {{ outline: 3px solid var(--sb-crust) !important; outline-offset: 2px; }}
-
-/* Type scale: 14 / 16 / 20 / 24 / 32 / 40. Nothing smaller than 14. The hero is 40, or 32 on a phone. */
-.sb-brand {{ font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }}
-.sb-subtitle {{ font-size: 16px; color: var(--sb-muted); margin-top: 4px; }}
-.sb-hero {{ font-size: 40px; line-height: 1.1; font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; }}
-.sb-hero.sb-over {{ color: var(--sb-over); }}
-@media (max-width: 480px) {{ .sb-hero {{ font-size: 32px; }} }}
-.sb-title {{ font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 8px; }}
-.sb-note {{ font-size: 14px; color: var(--sb-muted); }}
-.sb-money {{ font-family: var(--sb-money); font-variant-numeric: tabular-nums; white-space: nowrap; }}
-.sb-dot {{ width: 10px; height: 10px; border-radius: 999px; display: inline-block; flex: none; }}
-
-/* Cards: white on paper, 12px radius, 16px padding, one shadow. */
-.sb-card {{
-  background: var(--sb-card) !important; border: 1px solid var(--sb-line) !important; border-radius: 12px !important;
-  padding: 16px !important; gap: 12px !important; box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+.gradio-container {{
+  width: 100% !important; max-width: {PAGE_MAX_WIDTH} !important; margin: 0 auto !important; padding: 20px 16px 48px !important;
+  font-family: var(--sb-sans) !important; -webkit-font-smoothing: antialiased;
 }}
+.gradio-container .main {{ padding: 0 !important; }}
+.gradio-container .main > .wrap > .contain > .column {{ gap: 16px !important; }}
+footer {{ display: none !important; }}
+
+/* No backlights: Gradio's busy fade, accent border and progress overlay are off; keyboard focus keeps a thin ring. */
+.pending {{ opacity: 1 !important; animation: none !important; }}
+.block.border_focus, .block.border_contrast {{ border-color: transparent !important; }}
+.wrap.default, .wrap.center, .wrap.translucent, .eta-bar, .progress-level, .progress-text, .meta-text {{ display: none !important; }}
+:focus {{ outline: none; }}
+:focus-visible {{ outline: 2px solid var(--sb-accent) !important; outline-offset: 2px; box-shadow: none !important; }}
+textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
+
+/* Type: 14 / 16 / 20 / 26 / 40 / 64. Serif for display, Geist for everything else. Nothing under 14. */
+.sb-serif, .sb-wordmark, .sb-title, .sb-hero-amount, .sb-big {{
+  font-family: var(--sb-serif); font-weight: 400; letter-spacing: -0.01em;
+}}
+.sb-wordmark {{ font-size: 26px; line-height: 1; }}
+.sb-title {{ font-size: 26px; line-height: 1.1; display: flex; align-items: center; gap: 10px; }}
+.sb-eyebrow {{ font-size: 14px; font-weight: 500; color: var(--sb-muted); }}
+.sb-note {{ font-size: 14px; color: var(--sb-muted); line-height: 1.45; }}
+.sb-money {{ font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 500; }}
+.sb-hero-amount {{ font-size: 64px; line-height: 1; margin-top: 6px; font-variant-numeric: tabular-nums; }}
+.sb-hero-amount.sb-over {{ color: var(--sb-over); }}
+.sb-big {{ font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums; }}
+@media (max-width: 480px) {{
+  .sb-hero-amount {{ font-size: 48px; }}
+  .sb-title {{ font-size: 24px; }}
+}}
+.sb-dot {{ width: 10px; height: 10px; border-radius: 999px; display: inline-block; flex: none; }}
 .html-container, .prose {{ padding: 0 !important; }}
+
+/* Cards: white on paper, 20px corners, one soft shadow. */
+.sb-card {{
+  background: var(--sb-card) !important; border: 1px solid var(--sb-line) !important; border-radius: 20px !important;
+  padding: 20px !important; gap: 14px !important; box-shadow: 0 1px 2px rgb(28 27 24 / 0.04), 0 4px 16px rgb(28 27 24 / 0.04);
+}}
+@media (min-width: 600px) {{ .sb-card {{ padding: 24px !important; }} }}
+.sb-card-accent {{ background: var(--sb-accent-soft) !important; border-color: #CFE3D6 !important; }}
 .sb-row {{ align-items: center !important; gap: 8px !important; flex-wrap: nowrap !important; }}
 .sb-grow {{ flex: 1 1 auto !important; min-width: 0 !important; }}
 .sb-head {{ display: flex; justify-content: space-between; align-items: center; gap: 12px; }}
+.sb-head-total {{ display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }}
 .sb-head .sb-money {{ font-size: 16px; }}
-.sb-chip {{ display: inline-block; margin-top: 12px; padding: 4px 12px; border-radius: 999px; background: var(--sb-crust-soft); font-size: 14px; }}
+.sb-chip {{
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px;
+  background: var(--sb-accent-soft); color: var(--sb-accent-dark); font-size: 14px; font-weight: 500;
+}}
 
-/* A line in a section: name, amount, edit, delete. The divider runs the full width of the card. */
-.sb-item {{ border-top: 1px solid var(--sb-line); padding-top: 8px; }}
-.sb-line {{ display: flex; justify-content: space-between; gap: 12px; font-size: 16px; }}
+/* Header: logo and wordmark left, the person right. */
+.sb-header {{ display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 4px 0; }}
+.sb-brand {{ display: flex; align-items: center; gap: 10px; }}
+.sb-person {{ display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; }}
+.sb-avatar {{
+  width: 36px; height: 36px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--sb-accent-soft); color: var(--sb-accent-dark); font-weight: 600; font-size: 16px;
+}}
+
+/* Hero: the month, one big number, where the money went, and the duck. */
+.sb-hero-top {{ align-items: center !important; flex-wrap: nowrap !important; }}
+.sb-month-label {{ font-size: 16px; font-weight: 600; text-align: center; }}
+.sb-bar {{ display: flex; gap: 3px; height: 12px; margin: 20px 0 12px; }}
+.sb-bar > span {{ border-radius: 999px; min-width: 6px; }}
+.sb-bar-empty {{ flex: 1; background: var(--sb-line); }}
+.sb-key {{ display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px; color: var(--sb-muted); }}
+.sb-key span {{ display: inline-flex; align-items: center; gap: 6px; }}
+.sb-key .sb-money {{ color: var(--sb-ink); }}
+.sb-duck-says {{ display: flex; align-items: center; gap: 12px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--sb-line); }}
+.sb-bubble {{
+  position: relative; background: var(--sb-paper); border-radius: 14px; padding: 10px 14px; font-size: 14px; line-height: 1.4;
+}}
+.sb-bubble::before {{
+  content: ""; position: absolute; left: -6px; top: 50%; width: 12px; height: 12px; background: var(--sb-paper);
+  transform: translateY(-50%) rotate(45deg); border-radius: 2px;
+}}
+.sb-duck {{ flex: none; display: block; }}
+.sb-bob {{ animation: sb-bob 3.2s ease-in-out infinite; transform-origin: 50% 90%; }}
+@keyframes sb-bob {{ 0%, 100% {{ transform: translateY(0) rotate(0); }} 50% {{ transform: translateY(-3px) rotate(-2deg); }} }}
+@media (prefers-reduced-motion: reduce) {{ .sb-bob {{ animation: none; }} }}
+
+/* A line in a section: name, amount, edit, delete. Dividers run the full width. */
+.sb-item {{ border-top: 1px solid var(--sb-line); padding-top: 10px; }}
+.sb-line {{ display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 16px; }}
 .sb-line-name {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+
+/* Meters: thin, colour in the fill, words underneath. */
+.sb-meter {{ height: 6px; background: var(--sb-line); border-radius: 999px; overflow: hidden; }}
+.sb-meter > span {{ display: block; height: 100%; border-radius: 999px; }}
+.sb-meter-row {{ display: grid; gap: 6px; }}
+.sb-split {{ display: grid; gap: 16px; margin-top: 16px; }}
+.sb-meter-label {{ font-size: 14px; display: flex; justify-content: space-between; gap: 8px; }}
+.sb-meter-label > span:first-child {{ color: var(--sb-muted); }}
+
+/* Buttons: pills. "+ Add" is a small green pill; edit, delete and the month arrows are quiet circles. */
+.sb-add-button {{ min-width: 0 !important; padding: 8px 16px !important; font-size: 14px !important; height: 36px; flex: none !important; }}
+.sb-icon {{
+  border-radius: 999px !important; min-width: 40px !important; max-width: 40px; height: 40px; padding: 0 !important;
+  border: none !important; background: transparent !important; color: var(--sb-muted) !important; font-size: 16px !important;
+  flex: none !important;
+}}
+.sb-icon:hover {{ background: var(--sb-hover) !important; color: var(--sb-ink) !important; }}
+.sb-nav {{ border: 1px solid var(--sb-line) !important; font-size: 20px !important; color: var(--sb-ink) !important; }}
+.sb-panel {{ background: var(--sb-accent-soft); border-radius: 14px; padding: 14px !important; gap: 12px !important; }}
+/* Gradio groups side-by-side boxes into one joined "form"; keep them as separate boxes on a clear background. */
+.form {{ gap: 12px !important; background: transparent !important; border: none !important; box-shadow: none !important; overflow: visible !important; }}
+.form > .block, .sb-panel .block {{ background: transparent !important; }}
+/* Paired buttons share the row evenly; Gradio's 160px minimum would push the second one out on a phone. */
+.sb-card .row > button.lg:not(.sb-icon):not(.sb-add-button) {{
+  min-width: 0 !important; flex: 1 1 0 !important; padding-left: 12px !important; padding-right: 12px !important; white-space: nowrap;
+}}
+.sb-title + .sb-note {{ margin-top: 6px; }}
 
 /* Tabs: a pill switcher. The tab you are on is a white pill in ink. */
 .tab-wrapper {{ height: auto !important; margin-bottom: 16px; }}
@@ -158,43 +263,83 @@ footer {{ display: none !important; }}
   height: auto !important; width: max-content; gap: 4px; padding: 4px; border-radius: 999px; background: var(--sb-paper-deep);
 }}
 .tab-container button {{
-  height: auto !important; padding: 8px 20px !important; border: none !important; border-radius: 999px !important;
-  font-size: 16px !important; font-weight: 600 !important; color: var(--sb-muted) !important; background: transparent !important;
+  height: auto !important; padding: 8px 22px !important; border: none !important; border-radius: 999px !important;
+  font-size: 15px !important; font-weight: 600 !important; color: var(--sb-muted) !important; background: transparent !important;
 }}
-.tab-container button.selected {{ background: var(--sb-card) !important; color: var(--sb-ink) !important; box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); }}
+.tab-container button.selected {{ background: var(--sb-card) !important; color: var(--sb-ink) !important; box-shadow: 0 1px 3px rgb(28 27 24 / 0.12); }}
 .tab-container button::after, .tab-container button.selected::after {{ display: none !important; }}
-.sb-header {{ margin-bottom: 16px; }}
 
-/* Meters: colour in the fill, words beside it. */
-.sb-meter {{ height: 8px; background: var(--sb-line); border-radius: 999px; overflow: hidden; }}
-.sb-meter > span {{ display: block; height: 100%; border-radius: 999px; }}
-.sb-meter-row {{ display: grid; gap: 4px; }}
-.sb-split {{ display: grid; gap: 12px; margin-top: 12px; }}
-.sb-meter-label {{ font-size: 14px; color: var(--sb-ink); display: flex; justify-content: space-between; gap: 8px; }}
-
-/* Where the money went: one stacked bar and its key. */
-.sb-bar {{ display: flex; height: 16px; border-radius: 999px; overflow: hidden; background: var(--sb-line); margin: 16px 0 8px; }}
-.sb-key {{ display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 14px; }}
-.sb-key span {{ display: inline-flex; align-items: center; gap: 6px; }}
-
-/* Pill controls: + and x. Crust on the +, quiet on the x. */
-.sb-plus {{ border-radius: 999px !important; min-width: 40px !important; max-width: 40px; height: 40px; padding: 0 !important; font-size: 20px !important; }}
-.sb-x {{
-  border-radius: 999px !important; min-width: 32px !important; max-width: 32px; height: 32px; padding: 0 !important;
-  border: none !important; background: transparent !important; color: var(--sb-muted) !important; font-size: 16px !important;
-}}
-.sb-x:hover {{ background: var(--sb-crust-soft) !important; color: var(--sb-ink) !important; }}
-.sb-add {{ background: var(--sb-crust-soft); border-radius: 8px; padding: 12px !important; gap: 12px !important; }}
-
-/* Month switcher: round outlined arrows either side of the month. */
-.sb-month {{ align-items: center !important; flex-wrap: nowrap !important; margin-bottom: 4px; }}
-.sb-month .sb-title {{ justify-content: center; }}
-.sb-nav {{
-  border-radius: 999px !important; min-width: 40px !important; max-width: 40px; height: 40px; padding: 0 !important;
-  background: var(--sb-card) !important; border: 1px solid var(--sb-line) !important; font-size: 20px !important;
-}}
-.sb-nav:hover {{ background: var(--sb-crust-soft) !important; }}
+/* Sign in: the full mallard on top, everything centred. */
+.sb-auth {{ max-width: 440px; margin: 24px auto 0 !important; }}
+.sb-auth-top {{ display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; }}
+.sb-auth-top .sb-wordmark {{ font-size: 40px; margin-top: 4px; }}
+.sb-auth-top .sb-note {{ font-size: 16px; }}
+.sb-full {{ width: 100% !important; }}
+.sb-danger {{ background: transparent !important; box-shadow: none !important; border-style: dashed !important; }}
 """
+
+
+# ---------- The mallard ----------
+
+# Detailed and colourful, for the sign-in card. Faces right.
+DUCK_FULL = f"""<svg class="sb-duck sb-bob" viewBox="0 0 220 170" width="{{size}}" height="{{size_h}}" role="img" aria-label="Mallard duck mascot">
+<defs>
+  <linearGradient id="sbHead" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#2FA36B"/><stop offset="0.45" stop-color="{DUCK_HEAD}"/><stop offset="0.8" stop-color="#0E3B2A"/><stop offset="1" stop-color="#3A2F6B"/>
+  </linearGradient>
+  <linearGradient id="sbBody" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#D4CFC5"/><stop offset="1" stop-color="#A39D91"/>
+  </linearGradient>
+  <linearGradient id="sbBreast" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#9A5430"/><stop offset="1" stop-color="{DUCK_BREAST}"/>
+  </linearGradient>
+  <linearGradient id="sbWing" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#7F57C9"/><stop offset="1" stop-color="#2F4FC4"/>
+  </linearGradient>
+</defs>
+<ellipse cx="110" cy="152" rx="92" ry="10" fill="#D9ECF2"/>
+<path d="M44 150 q12 -6 24 0 q12 6 24 0 M128 152 q12 -6 24 0 q12 6 24 0" fill="none" stroke="#B9DCE7" stroke-width="2.5" stroke-linecap="round"/>
+<path d="M92 144 l-7 10 l13 -2 z M118 145 l-5 10 l12 -3 z" fill="#E88B2E"/>
+<path d="M20 93 L38 85 L36 100 Z" fill="#F4F2ED" stroke="#D8D3C9" stroke-width="1"/>
+<path d="M28 90 C46 84 70 80 104 80 C132 80 150 84 160 92 C176 104 178 126 160 138 C146 146 110 147 80 145 C58 143 42 132 34 116 C30 108 28 98 28 90 Z" fill="url(#sbBody)"/>
+<path d="M28 90 C38 86 48 84 58 85 C55 94 47 101 36 105 C31 100 28 95 28 90 Z" fill="#26241F"/>
+<path d="M47 86 C40 77 44 69 51 70 C56 71 56 78 50 79" fill="none" stroke="#26241F" stroke-width="3.5" stroke-linecap="round"/>
+<path d="M70 128 C92 134 124 134 150 128 M62 135 C88 141 126 141 148 135" fill="none" stroke="#9D978B" stroke-width="1.1" stroke-linecap="round" opacity="0.6"/>
+<path d="M134 86 C158 84 178 100 178 118 C178 130 168 138 156 138 C160 124 154 102 134 86 Z" fill="url(#sbBreast)"/>
+<path d="M130 96 C112 87 72 86 46 99 C60 113 94 121 122 116 C134 112 138 102 130 96 Z" fill="#8F887C"/>
+<path d="M60 106 C72 107 86 109 98 108 C90 115 72 116 57 111 Z" fill="url(#sbWing)"/>
+<path d="M60 106 C72 107 86 109 98 108 M57 111 C72 116 90 115 98 108" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+<path d="M80 96 C96 92 112 93 124 99 M72 101 C92 96 112 98 126 105 M104 112 C112 112 120 110 126 106" fill="none" stroke="#7A7468" stroke-width="1.3" stroke-linecap="round"/>
+<path d="M135 95 C133 79 139 65 151 58 L179 62 C179 78 173 91 163 99 Z" fill="url(#sbHead)"/>
+<ellipse cx="163" cy="50" rx="27" ry="23" fill="url(#sbHead)"/>
+<ellipse cx="155" cy="40" rx="10" ry="4.5" fill="#FFFFFF" opacity="0.22" transform="rotate(-20 155 40)"/>
+<path d="M136 93 C146 100 158 100 167 93" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round"/>
+<path d="M183 47 C196 44 208 49 210 56 C205 62 193 62 182 59 Z" fill="{DUCK_BILL}"/>
+<path d="M184 54 C194 55 202 55 208 55" fill="none" stroke="#C9971F" stroke-width="1.4" stroke-linecap="round"/>
+<circle cx="208.5" cy="55.5" r="1.8" fill="#3A2A10"/>
+<circle cx="173" cy="44" r="3.6" fill="#121110"/>
+<circle cx="174.3" cy="42.7" r="1.2" fill="#FFFFFF"/>
+</svg>"""
+
+# Simplified for the logo and the duck's speech bubble: flat colours, readable at 24px. Faces right.
+DUCK_MARK = f"""<svg class="sb-duck" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" role="img" aria-label="Sliced Bread duck">
+<path d="M5 33 C14 29 22 28 32 28 C44 28 53 33 55 41 C57 50 49 56 38 56 L20 56 C11 56 6 47 5 33 Z" fill="{DUCK_BODY}"/>
+<path d="M42 31 C52 33 58 41 56 48 C54 53 48 55 44 53 C47 46 47 37 42 31 Z" fill="{DUCK_BREAST}"/>
+<path d="M13 31 C9 28 10 23 14 23" fill="none" stroke="#26241F" stroke-width="2.6" stroke-linecap="round"/>
+<path d="M40 31 C40 24 43 20 47 19 L53 22 C53 27 51 31 47 34 Z" fill="{DUCK_HEAD}"/>
+<circle cx="47" cy="17" r="11" fill="{DUCK_HEAD}"/>
+<path d="M40 31 C43.5 33.5 47.5 33.5 51 30.5" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"/>
+<path d="M56 14.5 C60.5 13.5 63.5 15.5 63.5 18 C61.5 20 58.5 20 56 19 Z" fill="{DUCK_BILL}"/>
+<circle cx="50.5" cy="14" r="1.8" fill="#121110"/>
+</svg>"""
+
+
+def duck_full(size=160):
+    return DUCK_FULL.replace("{size}", str(size)).replace("{size_h}", str(round(size * 170 / 220)))
+
+
+def duck_mark(size=32):
+    return DUCK_MARK.replace("{size}", str(size))
 
 
 # ---------- HTML pieces (escape everything the user typed) ----------
@@ -220,10 +365,10 @@ def meter_html(result, label_left=""):
 
 
 def progress_html(saved, goal):
-    """The savings goal bar: always the good colour, it only fills."""
+    """The savings goal bar: always green, it only fills."""
     width = max(min(saved / goal, 1) * 100, 2)
     return (
-        f'<div class="sb-meter-row"><div class="sb-meter"><span style="width:{width:.1f}%;background:{GOOD}"></span></div>'
+        f'<div class="sb-meter-row"><div class="sb-meter"><span style="width:{width:.1f}%;background:{ACCENT}"></span></div>'
         f'<div class="sb-meter-label"><span>Savings goal</span><span class="sb-money">'
         f'{budget.format_money(saved)} of {budget.format_money(goal)}</span></div></div>'
     )

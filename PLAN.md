@@ -157,55 +157,63 @@ four people editing one pasted file will collide.
 Note: this folder currently sits inside a git repo rooted at `C:\Users\markg`. Step 0 is `git init`
 inside `Sliced Bread` so the project has its own repo.
 
-## 5. Design system — "Toast"
+## 5. Design system — "Pond"
 
-Borrowed on purpose: **Propolis's** one-meaningful-accent rule and paper-and-ink base, **Pratt's**
-quiet-screen and copy rules. Lives in `design.py`; nothing in `app.py` sets a color or size by hand.
+Lives in `design.py`; nothing in `app.py` sets a colour or size by hand. Replaced "Toast" on 2026-11-03.
 
-### The one rule: crust means *you can press it*
+### The one rule: green means go
 
-Crust (the toasted accent) marks controls: the **+** buttons, the primary button, focus rings, the
-active tab. It never marks money, status, or body text.
+Mallard green marks what you can press (buttons, "+ Add", focus) and spending that is on track. Amber means near a
+limit, red means over. Status never relies on colour alone: every meter carries words ("Near limit", "Over by $45").
 
-### Color
+### Colour
 
 | Token | Hex | Use |
 |---|---|---|
-| `paper` | `#F3F0EA` | Page background, a shade darker than cards |
-| `paper-deep` | `#E8E3DA` | Tab switcher track |
-| `card` | `#FFFFFF` | Section cards |
-| `ink` | `#1F1D1A` | All text, all money |
-| `muted` | `#6B655C` | Secondary labels (5:1 on paper) |
-| `line` | `#DCD5C9` | Card borders, dividers, empty meter track |
+| `paper` | `#F4F2ED` | Page background, a shade darker than cards |
+| `paper-deep` | `#E9E5DD` | Tab switcher track |
+| `card` | `#FFFFFF` | Cards |
+| `ink` | `#1C1B18` | All text, all money |
+| `muted` | `#6B665D` | Labels (5:1 on paper) |
+| `line` | `#E2DDD3` | Card borders, dividers, empty meter track |
 | `field-border` | `#958D81` | Text box borders (3.3:1 on white) |
-| `crust` | `#9A5B1E` | Controls, focus ring (white text on it: 5.4:1) |
-| `crust-soft` | `#F6EBDD` | Hover/wash behind the inline add row |
-| `good` | `#2F7D4F` | Meter fill under 90%, savings bar |
+| `accent` | `#1F7A4D` | Buttons, focus, on-track meters (white text on it: 5.3:1) |
+| `accent-dark` | `#17603C` | Button hover |
+| `accent-soft` | `#E7F1EA` | Add/edit panel, Investments card |
 | `warn` | `#D99A00` | Meter fill 90–100% |
-| `over` | `#B42318` | Meter fill over 100%, "Over budget" text |
+| `over` | `#B42318` | Meter fill over 100%, "Over budget" amount |
 
-Section dots and the stacked bar (fills only, never text): income `ink`, necessities `#3B6FB5`,
-discretionary `#8E4FA8`, travel `#1E8C93`, investments `good`.
-
-Status never relies on color alone: the meter always carries words ("Near limit", "Over by $45").
+Section dots and the stacked bar (fills only): income `ink`, necessities `#3B6FB5`, discretionary `#8E4FA8`,
+travel `#1E8C93`, investments `accent`. The duck has its own colours and they are used nowhere else.
 
 ### Type
 
-- **Inter** for text, **JetBrains Mono** with tabular numbers for every dollar amount, so columns align.
-- One scale: 14 / 16 / 20 / 24 / 32 / 40 px. The hero is 40, or 32 on a phone. Nothing under 14 px except chips.
+- **Instrument Serif** for the wordmark, card titles and the big numbers; **Geist** for everything else.
+- Money uses Geist with tabular figures so columns line up.
+- Scale: 14 / 16 / 20 / 26 / 40 / 64 px (the hero is 48 on a phone). Nothing under 14 px.
 - Sentence case everywhere. No exclamation marks.
 
-### Space and shape
+### Shape and space
 
-- Spacing steps: 4 / 8 / 12 / 16 / 24 / 32 px. Section cards: 16 px padding, 12 px gap between.
-- Radius: 8 px inputs and buttons, 12 px cards, pill for **+** and chips.
-- One shadow, on cards only: `0 1px 2px rgb(0 0 0 / 0.06)`.
-- One column, 640 px max, centered. Works at 375 px phone width with no sideways scroll.
+- Radius: cards 20 px, inner panels 14 px, text boxes 12 px. Buttons are pills; icon buttons are circles.
+- Card padding 20 px (24 px from 600 px wide); 16 px between cards.
+- One soft shadow, on cards only. One centred column, 640 px max; works at 375 px with no sideways scroll.
+
+### No backlights
+
+No glows. Focusing a text box turns its border green; nothing lights up around it. Gradio's busy fade, accent
+border and progress overlay are switched off. Keyboard focus keeps a thin 2 px green ring (accessibility).
+
+### The mallard
+
+- **Detailed** (`duck_full`): iridescent head, white neck ring, chestnut breast, grey body, blue-violet wing
+  patch, on water. Used on the sign-in card, with a gentle bob (off when the system asks for reduced motion).
+- **Logo** (`duck_mark`): flat colours, readable at 24 px. Used in the header and beside the hero's speech bubble.
+- For now the duck only says one line under the hero (`duck_line` in `app.py`): add income, nice, careful, quack.
 
 ### Copy (from Pratt's "quiet screens")
 
-- **The title states the answer**, not the topic: "$640 left to invest in October", not "Summary".
-- **One hero number per screen.**
+- The big number states the answer; its label says what it is ("Left to invest in November").
 - Labels are 1–3 words. Empty states are one line that says what to add.
 - **No small print.** If a screen needs explaining, it's too complicated; fix the screen.
 

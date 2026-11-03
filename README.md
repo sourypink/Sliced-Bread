@@ -40,7 +40,7 @@ python -m pytest
 | `app.py` | The Gradio screens: sign in, Budget tab, Account tab. The only file that uses Gradio. |
 | `budget.py` | The math: totals, what's left, limit alerts, savings progress, input checks. |
 | `storage.py` | Saves each name's budget as a JSON file. Demo mode: no passwords. |
-| `design.py` | "Toast", the design system: colours, type, spacing, the Gradio theme and CSS. |
+| `design.py` | "Pond", the design system: colours, type, spacing, the Gradio theme, CSS and the mallard mascot. |
 | `test_budget.py` | Tests for `budget.py` and `storage.py`. |
 | `build_notebook.py` | Rebuilds `Sliced_Bread.ipynb` from the files above. |
 | `Sliced_Bread.ipynb` | The Colab notebook: all the code, the tests and the running app. |
