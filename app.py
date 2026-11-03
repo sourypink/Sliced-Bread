@@ -191,40 +191,29 @@ def dollars_text(cents):
     return budget.format_money(cents).removeprefix("$") if cents else ""
 
 
-def signed_in(username):
-    """Everything the screen needs once someone is in: states, views and account fields."""
-    user_budget = storage.load_budget(username)
+def sign_in(name_text):
+    """Demo mode: any name opens that name's budget, and the password box is not checked."""
+    try:
+        name = storage.clean_name(name_text)
+        key = storage.file_key(name)
+    except ValueError as error:
+        raise fail(str(error))
+    user_budget = storage.load_budget(key)
     settings = user_budget["settings"]
-    display_name = storage.get_display_name(username)
     return (
-        username, user_budget, budget.month_key(), None,
+        key, user_budget, budget.month_key(), None,
         gr.update(visible=False), gr.update(visible=True),
-        header_html(display_name),
-        display_name,
-        *[dollars_text(settings["limits"][key]) for key in budget.LIMIT_KEYS],
+        header_html(name), gr.Tabs(selected="budget"),
+        *[dollars_text(settings["limits"][limit]) for limit in budget.LIMIT_KEYS],
         dollars_text(settings["savings_goal"]),
         *target_texts(settings.get("targets", {})),
-        "", "",
+        "",
     )
 
 
 def target_texts(targets):
     """Pre-fill for the three target boxes: "50", "30", "20", or blanks when off."""
     return [str(targets[key]) if targets else "" for key in budget.TARGET_KEYS]
-
-
-def sign_in(username, password):
-    try:
-        return signed_in(storage.sign_in(username, password))
-    except ValueError as error:
-        raise fail(str(error))
-
-
-def create_account(display_name, username, password):
-    try:
-        return signed_in(storage.create_account(username, password, display_name))
-    except ValueError as error:
-        raise fail(str(error))
 
 
 def sign_out():
@@ -268,59 +257,39 @@ def parse_field(label, text):
         raise ValueError(f"{label}: {error}")
 
 
-def save_display_name(user, display_name):
-    storage.set_display_name(user, display_name)
-    gr.Info("Name saved", title="Saved")
-    name = storage.get_display_name(user)
-    return header_html(name), name
-
-
-def change_password(user, current, new):
-    try:
-        storage.change_password(user, current, new)
-    except ValueError as error:
-        raise fail(str(error))
-    gr.Info("Password changed", title="Saved")
-    return "", ""
-
-
-def delete_account(user):
-    storage.delete_account(user)
-    gr.Info("Account and data deleted", title="Deleted")
+def delete_data(user):
+    storage.delete_budget(user)
+    gr.Info("Your data is deleted", title="Deleted")
     return (*sign_out(), gr.update(visible=False))
 
 
 # ---------- Layout ----------
 
 with gr.Blocks(title="Sliced Bread") as demo:
-    user_state = gr.State(None)  # signed-in username
-    budget_state = gr.State(None)  # that user's whole budget
+    user_state = gr.State(None)  # file key of the signed-in name, "mark_g"
+    budget_state = gr.State(None)  # that name's whole budget
     month_state = gr.State(budget.month_key())  # month on screen, "2026-10"
     open_state = gr.State(None)  # ("add", section) or ("edit", section, index): the one open form
 
-    # Sign in / create account
+    # Sign in: demo mode, any name and password work
     with gr.Column(elem_classes="sb-card") as auth_view:
-        html('<div class="sb-brand">Sliced Bread</div><div class="sb-subtitle">Know what is left to invest each month</div>')
-        with gr.Tabs():
-            with gr.Tab("Sign in"):
-                login_username = gr.Textbox(label="Username", html_attributes=gr.InputHTMLAttributes(autocomplete="username", autocapitalize="off"))
-                login_password = gr.Textbox(label="Password", type="password", html_attributes=gr.InputHTMLAttributes(autocomplete="current-password"))
-                login_button = gr.Button("Sign in", variant="primary")
-            with gr.Tab("Create account"):
-                new_display_name = gr.Textbox(label="Your name")
-                new_username = gr.Textbox(label="Username", placeholder="3-20 letters, numbers or _", html_attributes=gr.InputHTMLAttributes(autocomplete="username", autocapitalize="off"))
-                new_password = gr.Textbox(label="Password", type="password", placeholder="At least 6 characters", html_attributes=gr.InputHTMLAttributes(autocomplete="new-password"))
-                create_button = gr.Button("Create account", variant="primary")
+        html(
+            '<div class="sb-brand">Sliced Bread</div><div class="sb-subtitle">Know what is left to invest each month</div>'
+            '<span class="sb-chip">Demo: any name and password work</span>'
+        )
+        login_username = gr.Textbox(label="Name", placeholder="Your name", html_attributes=gr.InputHTMLAttributes(autocomplete="username"))
+        login_password = gr.Textbox(label="Password", type="password", placeholder="Anything", html_attributes=gr.InputHTMLAttributes(autocomplete="current-password"))
+        login_button = gr.Button("Sign in", variant="primary")
 
     with gr.Column(visible=False) as app_view:
-        greeting = html("")
+        greeting = html("", elem_classes="sb-header")
 
-        with gr.Tabs():
-            with gr.Tab("Budget"):
+        with gr.Tabs() as app_tabs:
+            with gr.Tab("Budget", id="budget"):
                 with gr.Row(elem_classes="sb-month"):
-                    previous_month = gr.Button("‹", elem_classes="sb-x", min_width=0, scale=0)
+                    previous_month = gr.Button("‹", elem_classes="sb-nav", min_width=0, scale=0)
                     month_title = html("", elem_classes="sb-grow")
-                    next_month = gr.Button("›", elem_classes="sb-x", min_width=0, scale=0)
+                    next_month = gr.Button("›", elem_classes="sb-nav", min_width=0, scale=0)
 
                 @gr.render(inputs=[budget_state, month_state, open_state], triggers=[budget_state.change, month_state.change, open_state.change])
                 def render_budget(user_budget, key, open_section):
@@ -388,7 +357,7 @@ with gr.Blocks(title="Sliced Bread") as demo:
                     with gr.Column(elem_classes="sb-card"):
                         html(investments_html(user_budget, key))
 
-            with gr.Tab("Account"):
+            with gr.Tab("Account", id="account"):
                 with gr.Column(elem_classes="sb-card"):
                     html('<div class="sb-title">Monthly limits</div><div class="sb-note">Leave blank for no limit.</div>')
                     with gr.Row():
@@ -414,36 +383,23 @@ with gr.Blocks(title="Sliced Bread") as demo:
                         save_targets_button = gr.Button("Save targets", variant="primary")
 
                 with gr.Column(elem_classes="sb-card"):
-                    html('<div class="sb-title">Profile</div>')
-                    display_name = gr.Textbox(label="Your name")
-                    save_name_button = gr.Button("Save name")
-
-                with gr.Column(elem_classes="sb-card"):
-                    html('<div class="sb-title">Password</div>')
-                    current_password = gr.Textbox(label="Current password", type="password", html_attributes=gr.InputHTMLAttributes(autocomplete="current-password"))
-                    changed_password = gr.Textbox(label="New password", type="password", html_attributes=gr.InputHTMLAttributes(autocomplete="new-password"))
-                    change_password_button = gr.Button("Change password")
-
-                with gr.Column(elem_classes="sb-card"):
                     sign_out_button = gr.Button("Sign out")
-                    delete_button = gr.Button("Delete my account", variant="stop")
+                    delete_button = gr.Button("Delete my data", variant="stop")
                     with gr.Column(visible=False) as delete_confirm:
-                        html('<div class="sb-note">This removes your account and every month of data. It cannot be undone.</div>')
+                        html('<div class="sb-note">This removes every month saved under your name. It cannot be undone.</div>')
                         with gr.Row():
                             confirm_delete_button = gr.Button("Delete for good", variant="stop")
-                            keep_button = gr.Button("Keep my account")
+                            keep_button = gr.Button("Keep my data")
 
     # ---------- Wiring ----------
 
     limit_boxes = [limit_overall, limit_necessities, limit_discretionary, limit_travel]
     session_outputs = [user_state, budget_state, month_state, open_state, auth_view, app_view]
     target_boxes = [target_needs, target_wants, target_savings]
-    signed_in_outputs = session_outputs + [greeting, display_name, *limit_boxes, savings_goal, *target_boxes, login_password, new_password]
+    signed_in_outputs = session_outputs + [greeting, app_tabs, *limit_boxes, savings_goal, *target_boxes, login_password]
 
-    for trigger in (login_button.click, login_password.submit):
-        trigger(sign_in, inputs=[login_username, login_password], outputs=signed_in_outputs)
-    for trigger in (create_button.click, new_password.submit):
-        trigger(create_account, inputs=[new_display_name, new_username, new_password], outputs=signed_in_outputs)
+    for trigger in (login_button.click, login_username.submit, login_password.submit):
+        trigger(sign_in, inputs=login_username, outputs=signed_in_outputs)
 
     month_state.change(lambda key: f'<div class="sb-title">{budget.month_label(key)}</div>', inputs=month_state, outputs=month_title)
     demo.load(lambda key: f'<div class="sb-title">{budget.month_label(key)}</div>', inputs=month_state, outputs=month_title)
@@ -453,13 +409,11 @@ with gr.Blocks(title="Sliced Bread") as demo:
     save_limits_button.click(save_settings, inputs=[user_state, budget_state, *limit_boxes, savings_goal], outputs=budget_state)
     save_targets_button.click(save_targets, inputs=[user_state, budget_state, *target_boxes], outputs=[budget_state, *target_boxes])
     use_rule_button.click(use_50_30_20, inputs=[user_state, budget_state], outputs=[budget_state, *target_boxes])
-    save_name_button.click(save_display_name, inputs=[user_state, display_name], outputs=[greeting, display_name])
-    change_password_button.click(change_password, inputs=[user_state, current_password, changed_password], outputs=[current_password, changed_password])
 
     sign_out_button.click(sign_out, outputs=session_outputs + [greeting, login_password])
     delete_button.click(lambda: gr.update(visible=True), outputs=delete_confirm)
     keep_button.click(lambda: gr.update(visible=False), outputs=delete_confirm)
-    confirm_delete_button.click(delete_account, inputs=user_state, outputs=session_outputs + [greeting, login_password, delete_confirm])
+    confirm_delete_button.click(delete_data, inputs=user_state, outputs=session_outputs + [greeting, login_password, delete_confirm])
 
 
 if __name__ == "__main__":

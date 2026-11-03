@@ -12,11 +12,13 @@ import budget
 
 # ---------- Tokens ----------
 
-PAPER = "#FAF8F4"  # page background
+PAPER = "#F3F0EA"  # page background, a shade darker than cards so they stand off it
+PAPER_DEEP = "#E8E3DA"  # the tab switcher's track
 CARD = "#FFFFFF"  # section cards
 INK = "#1F1D1A"  # all text, all money
-MUTED = "#6B655C"  # secondary labels, 5.4:1 on paper
-LINE = "#E7E2D9"  # borders, dividers, empty meter track
+MUTED = "#6B655C"  # secondary labels, 5:1 on paper
+LINE = "#DCD5C9"  # card borders, dividers, empty meter track
+FIELD_BORDER = "#958D81"  # text box borders, 3.3:1 on white so a box reads as a box
 CRUST = "#9A5B1E"  # controls and focus ring; white text on it is 5.4:1
 CRUST_DARK = "#7E4916"  # control hover
 CRUST_SOFT = "#F6EBDD"  # wash behind the open add row
@@ -44,7 +46,7 @@ CRUST_RAMP = gr.themes.Color(
     c600=CRUST, c700=CRUST_DARK, c800="#633912", c900="#4A2B0E", c950="#2E1B09", name="crust",
 )
 PAPER_RAMP = gr.themes.Color(
-    c50=PAPER, c100="#F3F0EA", c200=LINE, c300="#D3CCC0", c400="#A39C90", c500="#7D776D",
+    c50=PAPER, c100=PAPER_DEEP, c200=LINE, c300="#C9C1B4", c400=FIELD_BORDER, c500="#7D776D",
     c600=MUTED, c700="#4A4640", c800="#2F2C28", c900=INK, c950="#141311", name="paper",
 )
 
@@ -68,10 +70,28 @@ def build_theme():
         border_color_primary=LINE,
         block_background_fill=CARD,
         block_border_color=LINE,
+        block_border_width="0px",
         block_shadow="none",
+        block_padding="0px",
+        block_title_text_color=MUTED,
+        block_title_text_size="14px",
+        block_title_text_weight="500",
+        block_label_text_color=MUTED,
         input_background_fill=CARD,
-        input_border_color=LINE,
+        input_border_width="1px",
+        input_border_color=FIELD_BORDER,
+        input_border_color_hover=INK,
         input_border_color_focus=CRUST,
+        input_shadow="none",
+        input_shadow_focus=f"0 0 0 3px {CRUST_SOFT}",
+        input_radius="8px",
+        input_padding="10px 12px",
+        input_text_size="16px",
+        button_large_radius="8px",
+        button_small_radius="8px",
+        button_large_text_size="16px",
+        button_large_text_weight="600",
+        button_border_width="1px",
         button_primary_background_fill=CRUST,
         button_primary_background_fill_hover=CRUST_DARK,
         button_primary_text_color="#FFFFFF",
@@ -92,7 +112,7 @@ def build_theme():
 
 CSS = f"""
 :root {{
-  --sb-paper: {PAPER}; --sb-card: {CARD}; --sb-ink: {INK}; --sb-muted: {MUTED}; --sb-line: {LINE};
+  --sb-paper: {PAPER}; --sb-paper-deep: {PAPER_DEEP}; --sb-card: {CARD}; --sb-ink: {INK}; --sb-muted: {MUTED}; --sb-line: {LINE};
   --sb-crust: {CRUST}; --sb-crust-dark: {CRUST_DARK}; --sb-crust-soft: {CRUST_SOFT};
   --sb-over: {OVER};
   --sb-money: '{FONT_MONEY}', ui-monospace, Consolas, monospace;
@@ -115,21 +135,35 @@ footer {{ display: none !important; }}
 .sb-money {{ font-family: var(--sb-money); font-variant-numeric: tabular-nums; white-space: nowrap; }}
 .sb-dot {{ width: 10px; height: 10px; border-radius: 999px; display: inline-block; flex: none; }}
 
-/* Cards: 12px radius, 16px padding, one shadow. */
+/* Cards: white on paper, 12px radius, 16px padding, one shadow. */
 .sb-card {{
-  background: var(--sb-card); border: 1px solid var(--sb-line); border-radius: 12px;
-  padding: 16px !important; gap: 8px !important; box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+  background: var(--sb-card) !important; border: 1px solid var(--sb-line) !important; border-radius: 12px !important;
+  padding: 16px !important; gap: 12px !important; box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
 }}
-.sb-card .html-container, .sb-card .prose {{ padding: 0 !important; }}
+.html-container, .prose {{ padding: 0 !important; }}
 .sb-row {{ align-items: center !important; gap: 8px !important; flex-wrap: nowrap !important; }}
 .sb-grow {{ flex: 1 1 auto !important; min-width: 0 !important; }}
-.sb-head {{ display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }}
+.sb-head {{ display: flex; justify-content: space-between; align-items: center; gap: 12px; }}
 .sb-head .sb-money {{ font-size: 16px; }}
-.sb-line {{
-  display: flex; justify-content: space-between; gap: 12px; font-size: 16px;
-  padding: 8px 0; border-top: 1px solid var(--sb-line);
-}}
+.sb-chip {{ display: inline-block; margin-top: 12px; padding: 4px 12px; border-radius: 999px; background: var(--sb-crust-soft); font-size: 14px; }}
+
+/* A line in a section: name, amount, edit, delete. The divider runs the full width of the card. */
+.sb-item {{ border-top: 1px solid var(--sb-line); padding-top: 8px; }}
+.sb-line {{ display: flex; justify-content: space-between; gap: 12px; font-size: 16px; }}
 .sb-line-name {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+
+/* Tabs: a pill switcher. The tab you are on is a white pill in ink. */
+.tab-wrapper {{ height: auto !important; margin-bottom: 16px; }}
+.tab-container:not(.visually-hidden) {{
+  height: auto !important; width: max-content; gap: 4px; padding: 4px; border-radius: 999px; background: var(--sb-paper-deep);
+}}
+.tab-container button {{
+  height: auto !important; padding: 8px 20px !important; border: none !important; border-radius: 999px !important;
+  font-size: 16px !important; font-weight: 600 !important; color: var(--sb-muted) !important; background: transparent !important;
+}}
+.tab-container button.selected {{ background: var(--sb-card) !important; color: var(--sb-ink) !important; box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); }}
+.tab-container button::after, .tab-container button.selected::after {{ display: none !important; }}
+.sb-header {{ margin-bottom: 16px; }}
 
 /* Meters: colour in the fill, words beside it. */
 .sb-meter {{ height: 8px; background: var(--sb-line); border-radius: 999px; overflow: hidden; }}
@@ -150,10 +184,16 @@ footer {{ display: none !important; }}
   border: none !important; background: transparent !important; color: var(--sb-muted) !important; font-size: 16px !important;
 }}
 .sb-x:hover {{ background: var(--sb-crust-soft) !important; color: var(--sb-ink) !important; }}
-.sb-add {{ background: var(--sb-crust-soft); border-radius: 8px; padding: 12px !important; gap: 8px !important; }}
-.sb-month {{ align-items: center !important; justify-content: space-between; flex-wrap: nowrap !important; }}
+.sb-add {{ background: var(--sb-crust-soft); border-radius: 8px; padding: 12px !important; gap: 12px !important; }}
+
+/* Month switcher: round outlined arrows either side of the month. */
+.sb-month {{ align-items: center !important; flex-wrap: nowrap !important; margin-bottom: 4px; }}
 .sb-month .sb-title {{ justify-content: center; }}
-.sb-gap {{ gap: 12px !important; }}
+.sb-nav {{
+  border-radius: 999px !important; min-width: 40px !important; max-width: 40px; height: 40px; padding: 0 !important;
+  background: var(--sb-card) !important; border: 1px solid var(--sb-line) !important; font-size: 20px !important;
+}}
+.sb-nav:hover {{ background: var(--sb-crust-soft) !important; }}
 """
 
 

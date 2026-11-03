@@ -41,9 +41,9 @@ Two screens after sign-in, as tabs: **Budget** (landing) and **Account**. Before
 │ Sliced Bread                 │
 │ Know what's left each month  │
 │                              │
-│ Username [            ]      │
-│ Password [            ]      │
-│ [ Sign in ]  Create account  │
+│ Name     [            ]      │
+│ Password [ anything   ]      │
+│ [ Sign in ]                  │
 └──────────────────────────────┘
 ```
 
@@ -80,7 +80,7 @@ hero says the same.
 
 ### Account
 
-- Display name, change password, sign out
+- Sign out
 - Monthly limits: overall, necessities, discretionary, travel (blank = no limit, no meter)
 - Savings goal (amount)
 - Percentage targets: needs (necessities), wants (discretionary + travel), savings (what is left); "Use 50/30/20" fills and saves them
@@ -94,7 +94,7 @@ Four modules, one owner each, so teammates rarely edit the same file.
 sliced-bread/
   app.py            Gradio UI: sign-in, Budget tab, Account tab. Only file that imports gradio.
   budget.py         Pure logic: totals, leftover, meter state, savings progress, input validation
-  storage.py        Read/write JSON; accounts with salted hashlib passwords
+  storage.py        Read/write one JSON budget per name (demo mode: no passwords)
   design.py         The design system in code: Gradio theme + one CSS string
   test_budget.py    pytest for budget.py and storage.py
   requirements.txt  gradio (pinned to the version Colab ships)
@@ -143,7 +143,7 @@ validation), loops (totals), functions, dicts/lists, file I/O (JSON), modules (`
    ```
 3. Re-run both cells after any change. No copy-pasting between tools.
 4. Colab wipes files when the runtime resets. Optional third cell mounts Google Drive and points
-   `DATA_DIR` there so demo accounts survive.
+   `DATA_DIR` there so saved budgets survive.
 5. Teammates who prefer Colab + Gemini can still edit: open the file in GitHub's web editor (press `.`
    on the repo page), commit, then re-run the Colab cells. Never edit only the Colab copy — it's lost
    on reset.
@@ -171,11 +171,13 @@ active tab. It never marks money, status, or body text.
 
 | Token | Hex | Use |
 |---|---|---|
-| `paper` | `#FAF8F4` | Page background |
+| `paper` | `#F3F0EA` | Page background, a shade darker than cards |
+| `paper-deep` | `#E8E3DA` | Tab switcher track |
 | `card` | `#FFFFFF` | Section cards |
 | `ink` | `#1F1D1A` | All text, all money |
-| `muted` | `#6B655C` | Secondary labels (5.4:1 on paper) |
-| `line` | `#E7E2D9` | Borders, dividers, empty meter track |
+| `muted` | `#6B655C` | Secondary labels (5:1 on paper) |
+| `line` | `#DCD5C9` | Card borders, dividers, empty meter track |
+| `field-border` | `#958D81` | Text box borders (3.3:1 on white) |
 | `crust` | `#9A5B1E` | Controls, focus ring (white text on it: 5.4:1) |
 | `crust-soft` | `#F6EBDD` | Hover/wash behind the inline add row |
 | `good` | `#2F7D4F` | Meter fill under 90%, savings bar |
@@ -216,11 +218,11 @@ Status never relies on color alone: the meter always carries words ("Near limit"
 | 2. `storage.py` + tests | Create account, sign in, save/load a month round-trips |
 | 3. `design.py` | Theme + CSS render on a blank Blocks page |
 | 4. Budget tab | Five sections, add/delete, hero + bar, month picker |
-| 5. Account tab | Limits, savings goal, password change, sign out |
+| 5. Account tab | Limits, savings goal, targets, sign out, delete my data |
 | 6. Check | Tests pass; clicked through at 375 px and desktop; runs from a fresh Colab |
 
 Validation handled in step 1: empty names, non-numbers, negatives, zero, more than 2 decimals, absurd
-amounts (> $10M), duplicate usernames, wrong password.
+amounts (> $10M), blank or symbol-only names.
 
 ## 7. Timeline and roles
 
@@ -238,7 +240,7 @@ Due date unknown — weeks below assume ~5 weeks. **OWNER TO CONFIRM the real da
 |---|---|
 | A (you) | `app.py` + integration, Colab launcher, final demo |
 | B | `budget.py`: calculations, alerts, validation |
-| C | `storage.py`: accounts, JSON files, Drive persistence |
+| C | `storage.py`: saved budgets, JSON files, Drive persistence |
 | D | `design.py` + summary bar; UI review at phone and desktop width |
 | E | `test_budget.py`, test-scenario log, README, slides |
 
@@ -254,6 +256,6 @@ With 4 members, A takes D's work.
 
 ## Known limitations (to state in the presentation)
 
-- Accounts are local JSON with hashed passwords — fine for a class demo, not real security.
+- Demo mode: any name and password sign in, and anyone who types your name sees your budget. Real accounts are future work.
 - Colab data disappears on runtime reset unless Drive is mounted.
 - One currency (USD); no bank sync.

@@ -11,7 +11,7 @@ like 50/30/20, and tracks a savings goal.
 
 The notebook holds every source file as a visible cell, so it is also the copy to hand in.
 
-Colab forgets files when the runtime resets. To keep accounts between sessions, uncomment the Google
+Colab forgets files when the runtime resets. To keep saved budgets between sessions, uncomment the Google
 Drive cell before running the last cell.
 
 **Workflow:** the `.py` files in this repo are the source. After changing one, run
@@ -39,7 +39,7 @@ python -m pytest
 |---|---|
 | `app.py` | The Gradio screens: sign in, Budget tab, Account tab. The only file that uses Gradio. |
 | `budget.py` | The math: totals, what's left, limit alerts, savings progress, input checks. |
-| `storage.py` | Accounts (salted, hashed passwords) and saving each user's budget as JSON. |
+| `storage.py` | Saves each name's budget as a JSON file. Demo mode: no passwords. |
 | `design.py` | "Toast", the design system: colours, type, spacing, the Gradio theme and CSS. |
 | `test_budget.py` | Tests for `budget.py` and `storage.py`. |
 | `build_notebook.py` | Rebuilds `Sliced_Bread.ipynb` from the files above. |
@@ -51,6 +51,6 @@ minus spending.
 
 ## Known limitations
 
-- Accounts live in local JSON files: fine for a class demo, not real security.
+- Demo mode: any name and password sign in, and anyone who types your name sees your budget.
 - In Colab, data disappears on a runtime reset unless Google Drive is mounted.
 - US dollars only; no bank connection; no recurring items yet (rent must be added each month).

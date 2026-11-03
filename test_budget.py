@@ -200,59 +200,31 @@ def temp_data_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(storage, "DATA_DIR", str(tmp_path))
 
 
-def test_create_account_and_sign_in():
-    assert storage.create_account(" Mark_G ", "secret1", "Mark") == "mark_g"
-    assert storage.sign_in("MARK_G", "secret1") == "mark_g"
-    assert storage.get_display_name("mark_g") == "Mark"
+@pytest.mark.parametrize("typed, key", [("Mark", "mark"), (" Mark  G ", "mark_g"), ("../../etc/x", "etc_x"), ("Ana-María", "ana-mar_a")])
+def test_any_name_maps_to_a_safe_file_key(typed, key):
+    assert storage.file_key(typed) == key
 
 
-@pytest.mark.parametrize("username, password, message", [
-    ("ab", "secret1", "3-20"), ("has space", "secret1", "3-20"), ("../evil", "secret1", "3-20"), ("okname", "123", "at least 6"),
-])
-def test_create_account_rejects_bad_input(username, password, message):
+@pytest.mark.parametrize("typed, message", [("", "Enter your name"), ("   ", "Enter your name"), ("!!!", "letter or number"), ("x" * 31, "30 characters")])
+def test_unusable_names_are_rejected(typed, message):
     with pytest.raises(ValueError, match=message):
-        storage.create_account(username, password)
+        storage.file_key(typed)
 
 
-def test_duplicate_username_rejected():
-    storage.create_account("mark", "secret1")
-    with pytest.raises(ValueError, match="taken"):
-        storage.create_account("MARK", "secret2")
-
-
-@pytest.mark.parametrize("username, password", [("mark", "wrong12"), ("nobody", "secret1"), ("", "")])
-def test_sign_in_fails_with_one_message(username, password):
-    storage.create_account("mark", "secret1")
-    with pytest.raises(ValueError, match="Wrong username or password"):
-        storage.sign_in(username, password)
-
-
-def test_password_is_not_stored_in_plain_text(tmp_path):
-    storage.create_account("mark", "secret1")
-    assert "secret1" not in (tmp_path / "users.json").read_text()
+def test_new_name_starts_with_an_empty_budget():
+    assert storage.load_budget("nobody") == budget.empty_budget()
 
 
 def test_budget_round_trips_through_a_file():
-    storage.create_account("mark", "secret1")
     user_budget = make_budget()
     user_budget["settings"]["savings_goal"] = 500000
     storage.save_budget("mark", user_budget)
     assert storage.load_budget("mark") == user_budget
+    assert storage.load_budget("someone_else") == budget.empty_budget()
 
 
-def test_change_password():
-    storage.create_account("mark", "secret1")
-    with pytest.raises(ValueError, match="Wrong"):
-        storage.change_password("mark", "nope123", "newpass1")
-    storage.change_password("mark", "secret1", "newpass1")
-    assert storage.sign_in("mark", "newpass1") == "mark"
-    with pytest.raises(ValueError):
-        storage.sign_in("mark", "secret1")
-
-
-def test_delete_account_removes_user_and_budget(tmp_path):
-    storage.create_account("mark", "secret1")
-    storage.delete_account("mark")
+def test_delete_budget(tmp_path):
+    storage.save_budget("mark", make_budget())
+    storage.delete_budget("mark")
     assert not (tmp_path / "mark.json").exists()
-    with pytest.raises(ValueError):
-        storage.sign_in("mark", "secret1")
+    storage.delete_budget("mark")  # deleting twice is fine
