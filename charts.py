@@ -2,7 +2,7 @@
 
 Built from plain HTML and CSS columns (not SVG) so labels stay readable at phone width. Follows the dataviz
 rules: columns at most 24px wide with 4px rounded tops, 2px gaps between stacked pieces, hairline gridlines,
-a legend, one callout above the plot, hover/keyboard details on every piece, and a table with every number.
+a legend, one callout above the plot, one hover/keyboard card per month, and a table with every number.
 """
 
 from html import escape
@@ -18,6 +18,9 @@ COMPACT_FROM_CENTS = 10_000 * budget.CENTS_PER_DOLLAR  # axis switches to "$10K"
 # Month labels: show every Nth, counted back from the latest month, so they never run together.
 LABEL_EVERY = ((12, 1), (24, 2))  # desktop: up to 12 months label all, up to 24 every other
 PHONE_LABEL_EVERY = ((6, 1), (12, 2), (24, 4))  # phone widths fit about six labels
+MAX_SHADED_ITEMS = 5  # lines named in a zoomed chart; smaller ones share one Other piece
+OTHER_LABEL = "Other"
+ALL_CHOICE = "All spending"  # the category radio's label for the unzoomed chart
 
 
 def nice_ceiling(cents):
@@ -44,58 +47,95 @@ def money_out(row):
     return row["spent"] + row["invested"]
 
 
-def piece(value, color, label, is_top):
-    """One stacked piece: hover title, keyboard focus and a screen-reader name carry its exact value."""
-    radius = " sb-seg-top" if is_top else ""
-    text = escape(label)
-    return f'<div class="sb-seg{radius}" style="flex:{value};background:{color}" tabindex="0" title="{text}" aria-label="{text}"></div>'
+def piece(value, color, zoom_to, is_top):
+    """One stacked piece. The month's tooltip carries the numbers; a piece can zoom the chart to its category."""
+    classes = "sb-seg" + (" sb-seg-top" if is_top else "") + (" sb-zoomable" if zoom_to else "")
+    zoom = f' data-sb-zoom="{escape(zoom_to)}"' if zoom_to else ""
+    return f'<div class="{classes}" style="flex:{value};background:{color}"{zoom}></div>'
 
 
 def column(pieces, height_percent):
-    """A column of stacked pieces, bottom piece first, as tall as height_percent of the plot."""
+    """A column of stacked (value, color, zoom_to) pieces, bottom piece first, as tall as height_percent of the plot."""
     shown = [p for p in pieces if p[0] > 0]
     if not shown:
         return ""
-    inner = "".join(piece(value, color, text, index == len(shown) - 1) for index, (value, color, text) in enumerate(shown))
+    inner = "".join(piece(value, color, zoom_to, index == len(shown) - 1) for index, (value, color, zoom_to) in enumerate(shown))
     return f'<div class="sb-stack" style="height:{height_percent:.2f}%">{inner}</div>'
 
 
-def history_chart(rows, category):
-    """Earned vs money out per month, or one category with everything else greyed out."""
+def tooltip(month, entries, total, opens_left):
+    """The month's hover card: a swatch, name and amount per (name, color, cents), then the (name, cents) total."""
+    rows = "".join(
+        f'<div class="sb-tip-row"><i style="background:{color}"></i><span>{escape(name)}</span><b>{budget.format_money(cents)}</b></div>'
+        for name, color, cents in entries
+    )
+    total_row = f'<div class="sb-tip-row sb-tip-total"><i></i><span>{total[0]}</span><b>{budget.format_money(total[1])}</b></div>'
+    side = " sb-tip-left" if opens_left else ""
+    return f'<div class="sb-tip{side}" aria-hidden="true"><div class="sb-tip-month">{month}</div>{rows}{total_row}</div>'
+
+
+def month_column(month, stacks, entries, total, opens_left):
+    """One month: its stacked columns plus the tooltip, focusable so the keyboard gets the same card."""
+    summary = ", ".join(f"{name} {budget.format_money(cents)}" for name, _, cents in entries)
+    label = escape(f"{month}: {summary}, {total[0]} {budget.format_money(total[1])}")
+    return f'<div class="sb-month-col" tabindex="0" aria-label="{label}">{"".join(stacks)}{tooltip(month, entries, total, opens_left)}</div>'
+
+
+def zoom_series(lines, category):
+    """The zoomed category's lines ranked by their range total, biggest first, as [(label, color)]; the tail is Other."""
+    totals = {}
+    for month_lines in lines.values():
+        for label, cents in month_lines.items():
+            totals[label] = totals.get(label, 0) + cents
+    ranked = sorted(totals, key=lambda label: totals[label], reverse=True)
+    names = ranked[:MAX_SHADED_ITEMS] + ([OTHER_LABEL] if len(ranked) > MAX_SHADED_ITEMS else [])
+    return list(zip(names, design.shades(design.SECTION_COLORS[category], len(names)))) if names else []
+
+
+def month_amounts(month_lines, series):
+    """One month's cents per series entry; lines outside the named ones add up into Other."""
+    named = {label for label, _ in series if label != OTHER_LABEL}
+    other = sum(cents for label, cents in month_lines.items() if label not in named)
+    return [other if label == OTHER_LABEL else month_lines.get(label, 0) for label, _ in series]
+
+
+def history_chart(rows, category, lines=None):
+    """Earned vs money out per month, or one category split into its lines, darkest (biggest) at the bottom."""
     zoomed = category in SECTION_NAMES
-    tallest = max((money_out(row) if zoomed else max(row["income"], money_out(row))) for row in rows)
+    lines = lines or {}
+    series = zoom_series(lines, category) if zoomed else []
+    if zoomed:
+        tallest = max(row["sections"][category] for row in rows)
+    else:
+        tallest = max(max(row["income"], money_out(row)) for row in rows)
     top, step = nice_ceiling(tallest)
 
+    count = len(rows)
     columns = []
-    for row in rows:
+    for index, row in enumerate(rows):
         month = full_month(row["key"])
+        opens_left = index >= count / 2
         if zoomed:
-            others = money_out(row) - row["sections"][category]
-            amount = row["sections"][category]
-            spent = column(
-                [(amount, design.SECTION_COLORS[category], f"{month} · {SECTION_NAMES[category]} {budget.format_money(amount)}"),
-                 (others, design.MUTED_FILL, f"{month} · Everything else {budget.format_money(others)}")],
-                money_out(row) / top * 100,
-            )
-            columns.append(f'<div class="sb-month-col">{spent}</div>')
+            amounts = month_amounts(lines.get(row["key"], {}), series)
+            stack = column([(cents, color, None) for cents, (_, color) in zip(amounts, series)], row["sections"][category] / top * 100)
+            entries = [(label, color, cents) for cents, (label, color) in zip(amounts, series) if cents > 0]
+            columns.append(month_column(month, [stack], entries, ("Total", row["sections"][category]), opens_left))
             continue
-        earned = column(
-            [(row["income"], design.SECTION_COLORS["income"], f"{month} · Earned {budget.format_money(row['income'])}")],
-            row["income"] / top * 100,
-        )
+        earned = column([(row["income"], design.SECTION_COLORS["income"], None)], row["income"] / top * 100)
         spent = column(
-            [(row["sections"][section], design.SECTION_COLORS[section],
-              f"{month} · {SECTION_NAMES[section]} {budget.format_money(row['sections'][section])}")
-             for section in SECTION_NAMES],
+            [(row["sections"][section], design.SECTION_COLORS[section], name) for section, name in SECTION_NAMES.items()],
             money_out(row) / top * 100,
         )
-        columns.append(f'<div class="sb-month-col">{earned}{spent}</div>')
+        entries = [("Earned", design.SECTION_COLORS["income"], row["income"])] + [
+            (name, design.SECTION_COLORS[section], row["sections"][section]) for section, name in SECTION_NAMES.items()
+            if row["sections"][section]
+        ]
+        columns.append(month_column(month, [earned, spent], entries, ("Money out", money_out(row)), opens_left))
 
     grid = "".join(
         f'<div class="sb-grid" style="bottom:{value / top * 100:.2f}%"><span>{tick_label(value)}</span></div>'
         for value in range(0, top + 1, step)
     )
-    count = len(rows)
     every = next(step for limit, step in LABEL_EVERY if count <= limit)
     phone_every = next(step for limit, step in PHONE_LABEL_EVERY if count <= limit)
     months = "".join(
@@ -104,13 +144,15 @@ def history_chart(rows, category):
     )
     title = f"{SECTION_NAMES[category]} by month" if zoomed else "Earned vs spent and invested"
     span = full_month(rows[0]["key"]) if count == 1 else f"{full_month(rows[0]['key'])} to {full_month(rows[-1]['key'])}"
+    back = f'<button class="sb-back" data-sb-zoom="{ALL_CHOICE}">&larr; {ALL_CHOICE}</button>' if zoomed else ""
+    hint = "" if zoomed else '<div class="sb-note">Click a colour to see what it is made of.</div>'
     best = best_month_html(rows, category)
     return (
-        f'<div class="sb-title">{title}</div><div class="sb-note">{span}</div>{best}'
+        f'<div class="sb-title">{title}</div><div class="sb-note">{span}</div>{back}{best}'
         f'<div class="sb-chart" role="group" aria-label="{escape(title)}, {escape(span)}">'
         f'<div class="sb-plot">{grid}<div class="sb-cols" style="grid-template-columns:repeat({count},minmax(0,1fr))">{"".join(columns)}</div></div>'
         f'<div class="sb-xaxis" style="grid-template-columns:repeat({count},minmax(0,1fr))">{months}</div></div>'
-        f"{legend_html(category)}{numbers_table_html(rows, category)}"
+        f"{legend_html(category, series)}{hint}{numbers_table_html(rows, category)}"
     )
 
 
@@ -137,12 +179,15 @@ def label_classes(months_back, every, phone_every):
     return " ".join(hidden)
 
 
-def legend_html(category):
+def legend_html(category, series):
+    """Zoomed: each line's shade. Otherwise every category; the spending ones are buttons that zoom in."""
     if category in SECTION_NAMES:
-        entries = [(SECTION_NAMES[category], design.SECTION_COLORS[category]), ("Everything else", design.MUTED_FILL)]
+        items = "".join(f'<span><i style="background:{color}"></i>{escape(name)}</span>' for name, color in series)
     else:
-        entries = [("Earned", design.SECTION_COLORS["income"])] + [(name, design.SECTION_COLORS[key]) for key, name in SECTION_NAMES.items()]
-    items = "".join(f'<span><i style="background:{color}"></i>{name}</span>' for name, color in entries)
+        items = f'<span><i style="background:{design.SECTION_COLORS["income"]}"></i>Earned</span>' + "".join(
+            f'<button data-sb-zoom="{name}"><i style="background:{design.SECTION_COLORS[key]}"></i>{name}</button>'
+            for key, name in SECTION_NAMES.items()
+        )
     return f'<div class="sb-legend">{items}</div>'
 
 

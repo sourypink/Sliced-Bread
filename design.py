@@ -36,7 +36,9 @@ SECTION_COLORS = {
     "investments": "#6250D6",  # passes on adjacent pairs; stacks keep it away from necessities blue
     "savings": ACCENT,
 }
-MUTED_FILL = "#D9D4CA"  # the categories you didn't pick, when the History chart zooms in on one
+# History zoom: a category's lines run from its colour mixed toward black (biggest) to toward white (smallest).
+DARKEST_MIX = 0.35  # share of black in the biggest line's shade
+LIGHTEST_MIX = 0.6  # share of white in the smallest; any lighter fades into the white card
 METER_COLORS = {"good": ACCENT, "warn": WARN, "over": OVER}
 
 # The mallard's own colours. Duck only; never used for UI.
@@ -55,6 +57,15 @@ HEAD = (
     '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
     '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&'
     'family=Instrument+Serif:ital@0;1&display=swap">'
+    # History: clicking anything with data-sb-zoom picks that category in the hidden radio, which redraws the chart.
+    "<script>document.addEventListener('click', function (event) {"
+    "  var target = event.target.closest && event.target.closest('[data-sb-zoom]');"
+    "  if (!target) return;"
+    "  var choice = target.getAttribute('data-sb-zoom');"
+    "  document.querySelectorAll('.sb-category-pick label').forEach(function (label) {"
+    "    if (label.textContent.trim() === choice) label.querySelector('input').click();"
+    "  });"
+    "});</script>"
 )
 
 # Green and paper as Gradio colour ramps, so built-in components pick them up.
@@ -315,11 +326,34 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
   white-space: nowrap; font-variant-numeric: tabular-nums;
 }}
 .sb-cols {{ position: absolute; inset: 0; display: grid; align-items: end; }}
-.sb-month-col {{ display: flex; justify-content: center; align-items: flex-end; gap: 2px; height: 100%; min-width: 0; }}
+.sb-month-col {{ position: relative; display: flex; justify-content: center; align-items: flex-end; gap: 2px; height: 100%; min-width: 0; }}
+.sb-month-col:hover, .sb-month-col:focus-visible {{ z-index: 2; }}
 .sb-stack {{ position: relative; width: 24px; max-width: 42%; display: flex; flex-direction: column-reverse; gap: 2px; }}
 .sb-seg {{ min-height: 2px; outline-offset: 1px; }}
 .sb-seg-top {{ border-radius: 4px 4px 0 0; }}
-.sb-seg:hover, .sb-seg:focus-visible {{ filter: brightness(1.12); }}
+.sb-seg:hover {{ filter: brightness(1.12); }}
+.sb-zoomable {{ cursor: pointer; }}
+/* One tooltip per month, beside the column so it stays inside the plot; right-half months open to the left. */
+.sb-tip {{
+  display: none; position: absolute; top: 0; left: calc(50% + 18px); z-index: 3; width: max-content; max-width: 220px;
+  padding: 10px 12px; border-radius: 12px; background: var(--sb-card); border: 1px solid var(--sb-line);
+  box-shadow: 0 4px 16px rgb(28 27 24 / 0.14); font-size: 14px; pointer-events: none; text-align: left;
+}}
+.sb-tip-left {{ left: auto; right: calc(50% + 18px); }}
+.sb-month-col:hover .sb-tip, .sb-month-col:focus-visible .sb-tip {{ display: block; }}
+/* Phones are too narrow to open beside a middle month: pin the card to the plot's far top corner instead. */
+@media (max-width: 480px) {{
+  .sb-month-col {{ position: static; }}
+  .sb-tip {{ left: auto; right: 0; }}
+  .sb-tip-left {{ left: 0; right: auto; }}
+}}
+.sb-tip-month {{ font-weight: 600; margin-bottom: 6px; }}
+.sb-tip-row {{ display: flex; align-items: center; gap: 8px; line-height: 1.6; }}
+.sb-tip-row i {{ flex: none; width: 10px; height: 10px; border-radius: 3px; }}
+.sb-tip-row span {{ flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sb-muted); }}
+.sb-tip-row b {{ font-weight: 600; font-variant-numeric: tabular-nums; }}
+.sb-tip-total {{ border-top: 1px solid var(--sb-line); margin-top: 4px; padding-top: 4px; }}
+.sb-back {{ margin-top: 8px; padding: 0; border: none; background: none; font-size: 14px; font-weight: 600; color: var(--sb-accent-dark); cursor: pointer; }}
 .sb-callout {{ font-size: 14px; font-weight: 600; margin-top: 8px; }}
 .sb-xaxis {{ display: grid; margin: 8px 0 0 52px; font-size: 12px; color: var(--sb-muted); text-align: center; }}
 .sb-xaxis span {{ white-space: nowrap; }}
@@ -330,6 +364,9 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
 }}
 .sb-legend {{ display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 16px; font-size: 14px; color: var(--sb-muted); }}
 .sb-legend i {{ display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }}
+.sb-legend button {{ padding: 0; border: none; background: none; font: inherit; color: inherit; cursor: pointer; }}
+.sb-legend button:hover {{ color: var(--sb-ink); }}
+.sb-hidden {{ display: none !important; }}
 .sb-details {{ margin-top: 16px; border-top: 1px solid var(--sb-line); padding-top: 12px; }}
 .sb-details summary {{ cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sb-accent-dark); }}
 .sb-table-wrap {{ overflow-x: auto; }}
@@ -419,6 +456,20 @@ def duck_mark(size=32):
 
 
 # ---------- HTML pieces (escape everything the user typed) ----------
+
+def shades(color, count):
+    """count shades of one hex colour, darkest first: the History zoom's biggest line to its smallest."""
+    if count == 1:
+        return [color]
+    red, green, blue = (int(color[i:i + 2], 16) for i in (1, 3, 5))
+    result = []
+    for index in range(count):
+        mix = -DARKEST_MIX + (DARKEST_MIX + LIGHTEST_MIX) * index / (count - 1)  # below 0 toward black, above toward white
+        target = 255 if mix > 0 else 0
+        channels = (round(value + (target - value) * abs(mix)) for value in (red, green, blue))
+        result.append("#" + "".join(f"{channel:02X}" for channel in channels))
+    return result
+
 
 def dot(section):
     return f'<span class="sb-dot" style="background:{SECTION_COLORS[section]}"></span>'

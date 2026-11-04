@@ -325,14 +325,26 @@ def months_with_data(budget):
     return sum(1 for month in budget["months"].values() if any(month.values()))
 
 
+def line_label(item):
+    """How a line is named in History: investment lines carry their tier, "Retirement: Index fund"."""
+    return f"{item['tier']}: {item['name']}" if "tier" in item else item["name"]
+
+
 def top_items(budget, keys, section, limit=5):
     """The biggest lines in a section across the given months: (name, month_key, cents), largest first."""
-    items = [
-        (f"{item['tier']}: {item['name']}" if "tier" in item else item["name"], key, item["amount"])
-        for key in keys
-        for item in get_month(budget, key)[section]
-    ]
+    items = [(line_label(item), key, item["amount"]) for key in keys for item in get_month(budget, key)[section]]
     return sorted(items, key=lambda item: item[2], reverse=True)[:limit]
+
+
+def section_lines(budget, keys, section):
+    """Each month's lines in one section as {month_key: {label: cents}}; lines sharing a label add up."""
+    months = {}
+    for key in keys:
+        totals = months.setdefault(key, {})
+        for item in get_month(budget, key)[section]:
+            label = line_label(item)
+            totals[label] = totals.get(label, 0) + item["amount"]
+    return months
 
 
 def fill_sample_months(budget, current_key):
