@@ -1,10 +1,12 @@
-"""Tests for budget.py and storage.py. Run with: python -m pytest"""
+"""Tests for budget.py, storage.py and the History zoom helpers. Run with: python -m pytest"""
 
 from datetime import date
 
 import pytest
 
 import budget
+import charts
+import design
 import storage
 
 
@@ -292,6 +294,30 @@ def test_top_items_largest_first_and_limited():
     budget.add_item(user_budget, "2026-09", "necessities", "Car repair", "900")
     items = budget.top_items(user_budget, ["2026-09", "2026-10"], "necessities", limit=2)
     assert items == [("Rent", "2026-10", 120000), ("Car repair", "2026-09", 90000)]
+
+
+def test_section_lines_merges_same_label_and_keeps_empty_months():
+    user_budget = budget.empty_budget()
+    budget.add_item(user_budget, "2026-09", "necessities", "Rent", "1000")
+    budget.add_item(user_budget, "2026-09", "necessities", "Rent", "200")
+    budget.add_item(user_budget, "2026-09", "investments", "Index fund", "50", "Retirement")
+    assert budget.section_lines(user_budget, ["2026-08", "2026-09"], "necessities") == {"2026-08": {}, "2026-09": {"Rent": 120000}}
+    assert budget.section_lines(user_budget, ["2026-09"], "investments") == {"2026-09": {"Retirement: Index fund": 5000}}
+
+
+def test_shades_run_darkest_to_lightest():
+    colors = design.shades("#2A78D6", 4)
+    assert len(colors) == 4 and all(len(color) == 7 and color.startswith("#") for color in colors)
+    brightness = [sum(int(color[i:i + 2], 16) for i in (1, 3, 5)) for color in colors]
+    assert brightness == sorted(brightness) and colors[0] != colors[-1]
+    assert design.shades("#2A78D6", 1) == ["#2A78D6"]
+
+
+def test_zoom_series_ranks_by_range_total_and_groups_the_rest():
+    lines = {"2026-09": {f"Line {n}": n * 100 for n in range(1, 8)}, "2026-10": {"Line 1": 10_000}}
+    names = [name for name, _ in charts.zoom_series(lines, "necessities")]
+    assert names == ["Line 1", "Line 7", "Line 6", "Line 5", "Line 4", charts.OTHER_LABEL]
+    assert charts.month_amounts(lines["2026-09"], charts.zoom_series(lines, "necessities"))[-1] == 300 + 200
 
 
 def test_fill_sample_months_only_fills_empty_earlier_months():

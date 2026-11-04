@@ -319,11 +319,14 @@ def history_view(user_budget, range_choice, category_choice):
     end_key, count = budget.history_range(user_budget, range_choice, budget.month_key())
     rows = budget.month_history(user_budget, end_key, count)
     items = ""
+    lines = None
     if category in charts.SECTION_NAMES:
-        items = charts.top_items_html(budget.top_items(user_budget, [row["key"] for row in rows], category), category)
+        keys = [row["key"] for row in rows]
+        items = charts.top_items_html(budget.top_items(user_budget, keys, category), category)
+        lines = budget.section_lines(user_budget, keys, category)
     offer_samples = budget.months_with_data(user_budget) < SAMPLE_OFFER_BELOW
     return (
-        charts.stat_tiles_html(rows, category), charts.history_chart(rows, category), items,
+        charts.stat_tiles_html(rows, category), charts.history_chart(rows, category, lines), items,
         gr.update(visible=bool(items)), gr.update(visible=offer_samples),
     )
 
@@ -462,7 +465,8 @@ with gr.Blocks(title="Sliced Bread") as demo:
 
             with gr.Tab("History", id="history"):
                 range_pick = gr.Radio(RANGE_CHOICES, value=RANGE_CHOICES[0], show_label=False, container=False, elem_classes="sb-pills")
-                category_pick = gr.Radio(list(CATEGORY_CHOICES), value="All spending", show_label=False, container=False, elem_classes="sb-pills")
+                # Hidden: the chart's coloured pieces and legend set it (design.HEAD's click script), and it redraws the chart.
+                category_pick = gr.Radio(list(CATEGORY_CHOICES), value="All spending", show_label=False, container=False, elem_classes="sb-hidden sb-category-pick")
                 with gr.Column(elem_classes="sb-card", visible=False) as sample_card:
                     html(
                         f'<div class="sb-duck-says" style="margin:0;padding:0;border:0">{design.duck_mark(44)}'
