@@ -26,19 +26,17 @@ HOVER = "#F0EDE7"  # neutral hover for quiet icon buttons
 WARN = "#D99A00"  # meter 90-100% (fill only, never text)
 OVER = "#B42318"  # meter over 100%, "Over budget" text
 
-# Fills only (section dots, bars, chart columns), never text. Checked with the dataviz palette validator:
+# Fills only (dots, bars, chart columns), never text. Checked with the dataviz palette validator:
 # all pairs pass lightness, chroma, colour-blind and normal-vision separation on white (2026-11-03).
-SECTION_COLORS = {
-    "income": ACCENT,
-    "necessities": "#2A78D6",
-    "discretionary": "#EB6834",
-    "travel": "#1BAF7A",
-    "investments": "#6250D6",  # passes on adjacent pairs; stacks keep it away from necessities blue
-    "savings": ACCENT,
-}
+INCOME_COLOR = ACCENT
+CATEGORY_COLORS = {"needs": "#2A78D6", "wants": "#EB6834", "investing": "#6250D6", "savings": "#1BAF7A"}
+# A category's subcategories run from a little darker than its colour to a little lighter, so the dot says the category.
+SUBCATEGORY_DARKEST_MIX = 0.2  # share of black in the first subcategory's shade (when there is more than one)
+SUBCATEGORY_LIGHTEST_MIX = 0.35  # share of white in the last
 # History zoom: a category's lines run from its colour mixed toward black (biggest) to toward white (smallest).
 DARKEST_MIX = 0.35  # share of black in the biggest line's shade
 LIGHTEST_MIX = 0.6  # share of white in the smallest; any lighter fades into the white card
+ITEM_LIGHTEST_MIX = 0.4  # same, from a subcategory's colour, which may already be up to 35% white
 METER_COLORS = {"good": ACCENT, "warn": WARN, "over": OVER}
 
 # The mallard's own colours. Duck only; never used for UI.
@@ -189,6 +187,12 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
   .sb-title {{ font-size: 24px; }}
 }}
 .sb-dot {{ width: 10px; height: 10px; border-radius: 999px; display: inline-block; flex: none; }}
+.sb-marker {{
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px 2px 8px; border-radius: 999px; flex: none;
+  border: 1px solid var(--sb-line); background: var(--sb-card); font-family: var(--sb-sans); font-size: 14px;
+  font-weight: 500; line-height: 1.4; color: var(--sb-muted); letter-spacing: 0; white-space: nowrap;
+}}
+.sb-marker .sb-dot {{ width: 8px; height: 8px; }}
 .html-container, .prose {{ padding: 0 !important; }}
 
 /* Cards: white on paper, 20px corners, one soft shadow. */
@@ -208,14 +212,41 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
   background: var(--sb-accent-soft); color: var(--sb-accent-dark); font-size: 14px; font-weight: 500;
 }}
 
-/* Header: logo and wordmark left, the person right. */
-.sb-header {{ display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 4px 0; }}
+/* Header: logo and wordmark left; the person's name and an avatar button right, which opens a small menu. */
+.sb-app {{ position: relative; }}
+.sb-header {{ align-items: center !important; flex-wrap: nowrap !important; gap: 10px !important; padding: 4px 4px 0; }}
 .sb-brand {{ display: flex; align-items: center; gap: 10px; }}
-.sb-person {{ display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; }}
-.sb-avatar {{
-  width: 36px; height: 36px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
-  background: var(--sb-accent-soft); color: var(--sb-accent-dark); font-weight: 600; font-size: 16px;
+.sb-person {{ flex: none !important; width: auto !important; }}
+.sb-person-name {{ font-size: 14px; font-weight: 500; white-space: nowrap; }}
+@media (max-width: 400px) {{ .sb-person-name {{ display: none; }} }}
+.sb-avatar-button {{
+  width: 40px !important; height: 40px; min-width: 40px !important; max-width: 40px; padding: 0 !important; flex: none !important;
+  border: none !important; border-radius: 999px !important; background: var(--sb-accent-soft) !important;
+  color: var(--sb-accent-dark) !important; font-weight: 600 !important; font-size: 16px !important;
 }}
+.sb-avatar-button:hover {{ background: #D5E8DC !important; }}
+.sb-menu {{
+  position: absolute !important; top: 52px; right: 0; z-index: 20; width: 200px !important; min-width: 0 !important;
+  padding: 8px !important; gap: 2px !important; box-shadow: 0 8px 24px rgb(28 27 24 / 0.14) !important;
+}}
+.sb-menu-item {{
+  justify-content: flex-start !important; border: none !important; background: transparent !important; box-shadow: none !important;
+  border-radius: 10px !important; padding: 10px 12px !important; font-size: 15px !important; font-weight: 500 !important;
+}}
+.sb-menu-item:hover {{ background: var(--sb-hover) !important; }}
+.sb-back-button {{
+  align-self: flex-start; width: auto !important; min-width: 0 !important; flex: none !important; padding: 8px 4px !important;
+  border: none !important; background: transparent !important; box-shadow: none !important;
+  color: var(--sb-accent-dark) !important; font-size: 15px !important; font-weight: 600 !important;
+}}
+
+/* Subcategories: a group per category under its marker; each row renames, moves or removes one. */
+.sb-group-head {{ margin-top: 8px; }}
+.sb-sub-row {{ gap: 8px !important; }}
+.sb-split-row {{ display: grid; gap: 8px; justify-items: start; }}
+.sb-split-row > .sb-meter-row {{ width: 100%; }}
+.sb-head .sb-title {{ flex-wrap: wrap; row-gap: 6px; min-width: 0; }}
+.sb-title-name {{ overflow-wrap: anywhere; }}
 
 /* Hero: the month, one big number, where the money went, and the duck. */
 .sb-hero-top {{ align-items: center !important; flex-wrap: nowrap !important; }}
@@ -457,22 +488,36 @@ def duck_mark(size=32):
 
 # ---------- HTML pieces (escape everything the user typed) ----------
 
-def shades(color, count):
+def shades(color, count, darkest=DARKEST_MIX, lightest=LIGHTEST_MIX):
     """count shades of one hex colour, darkest first: the History zoom's biggest line to its smallest."""
     if count == 1:
         return [color]
     red, green, blue = (int(color[i:i + 2], 16) for i in (1, 3, 5))
     result = []
     for index in range(count):
-        mix = -DARKEST_MIX + (DARKEST_MIX + LIGHTEST_MIX) * index / (count - 1)  # below 0 toward black, above toward white
+        mix = -darkest + (darkest + lightest) * index / (count - 1)  # below 0 toward black, above toward white
         target = 255 if mix > 0 else 0
         channels = (round(value + (target - value) * abs(mix)) for value in (red, green, blue))
         result.append("#" + "".join(f"{channel:02X}" for channel in channels))
     return result
 
 
-def dot(section):
-    return f'<span class="sb-dot" style="background:{SECTION_COLORS[section]}"></span>'
+def subcategory_colors(user_budget):
+    """Each subcategory's colour: a shade of its category's, in page order."""
+    colors = {}
+    for category, color in CATEGORY_COLORS.items():
+        keys = [sub["key"] for sub in budget.subcategories_in(user_budget, category)]
+        colors.update(zip(keys, shades(color, len(keys), SUBCATEGORY_DARKEST_MIX, SUBCATEGORY_LIGHTEST_MIX)))
+    return colors
+
+
+def dot(color):
+    return f'<span class="sb-dot" style="background:{color}"></span>'
+
+
+def marker(category):
+    """Which of the four categories something counts toward: a small pill with the category's dot and name."""
+    return f'<span class="sb-marker">{dot(CATEGORY_COLORS[category])}{budget.CATEGORY_NAMES[category]}</span>'
 
 
 def money(cents):
