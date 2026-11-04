@@ -6,14 +6,18 @@ Python + Gradio. Runs the same way on a laptop and in Google Colab. Status: **dr
 
 One question answered on one page: **how much do I have left to invest this month?**
 
-The page reads top to bottom, the way money flows:
+Words, used the same way in code and on screen:
 
-1. **Income** — every source (salary, freelance, other)
-2. **Necessities** — rent, groceries, gas, utilities
-3. **Discretionary** — movies, events, games, subscriptions
-4. **Travel** — trip costs
-5. **Investments** — what you put in, grouped into tiers you name (Retirement, Brokerage, ...)
-6. **Savings** — whatever is left: `income − spending − investing`
+- **Category**: one of four, fixed forever: **Needs**, **Wants**, **Investing**, **Savings**. Targets and the
+  History chart are built on these, so history stays comparable whatever else changes.
+- **Subcategory**: Necessities (Needs), Discretionary and Travel (Wants), Investments (Investing) to start, plus
+  up to 8 of the user's own. Each sits in exactly one category; on the Goals tab any of them can be renamed or
+  moved, and the user's own can be removed once they hold no items. A small marker ("● Wants") on every card
+  says which category it counts toward, and its dot is a shade of that category's colour.
+- **Item**: a line in a subcategory: Rent, Flights. Investments items also carry a tier you name (Retirement).
+
+The page reads top to bottom, the way money flows: **Income**, then the subcategories grouped Needs → Wants →
+Investing → Savings, then the **Savings** card: what was set aside in Savings subcategories plus whatever is left.
 
 No default line items. Each section starts empty with one line of guidance and a **+** button.
 
@@ -24,18 +28,21 @@ Maps to the brief's feature list:
 | Income tracking | Income section, total at the top |
 | Expense tracking (amount, category, description) | Sections 2–4; the section *is* the category, the line name is the description |
 | Edit a line | ✎ on a line opens it in place; Save or Cancel |
-| Overall + per-category budgets | Account page: one limit per section, plus an overall monthly limit |
+| Overall + per-category budgets | Goals tab: a limit for each starting subcategory, plus an overall monthly limit |
 | Automatic calculations | `budget.py`; every add or delete recomputes |
 | Budget alerts | A meter under each section: near limit at 90%, over at 100% |
 | Monthly summary | The hero line and stacked bar at the top of the page; month picker |
 | Investing with tiers | Investments section: lines grouped under tiers you create by typing a name |
-| Savings goal | Savings card: progress toward the goal set on the account page |
-| History over months | History tab: earned vs spent columns per month (6 / 12 months / All), zoom on one category with the rest greyed, biggest items, a table of every number, and sample months for demos |
-| Percentage targets (50/30/20) | Account page sets needs/wants/investing/savings % (50/30/20 fills 50/30/10/10); a split card under the hero compares actual vs target and alerts on overspend |
+| Savings goal | Savings card: progress toward the goal set on the Goals tab |
+| History over months | History tab: earned vs money out per month by category (6 / 12 months / All); click a category to see its subcategories, then a subcategory to see its items in shades of its colour; biggest items, a table of every number, and sample months for demos |
+| Percentage targets (50/30/20) | Goals tab sets the four categories' % (50/30/20 fills 50/30/10/10; typing three fills the fourth to make 100); a split card under the hero compares actual vs target and alerts on overspend |
+| Own categories | Goals tab: add a subcategory and pick which of the four categories it counts toward |
+| Accounts | Sign in with a name and password (salted hash); the avatar menu has Edit profile (name, email, password, delete my data) and Sign out |
 
 ## 2. Screens
 
-Two screens after sign-in, as tabs: **Budget** (landing) and **Account**. Before sign-in, only the sign-in card.
+Three tabs after sign-in: **Budget** (landing), **History** and **Goals**, plus a **Profile** page opened from the
+avatar menu. Before sign-in, only the sign-in card.
 
 ### Sign in
 
@@ -83,23 +90,27 @@ hero says the same.
 
 ### History
 
-- Filters in one row of pills: range (6 months, 12 months, All) and category (All spending, Necessities,
-  Discretionary, Travel).
-- Three tiles for the range: earned, spent, left. When zoomed: spent on that category, monthly average, share.
-- Column chart per month: earned beside spent (stacked by category). Pick a category and earned drops out, the
-  axis rescales to spending, the category sits at the base in colour and everything else turns grey.
-- Biggest items in the chosen category, and "See the numbers" opens a table with every value.
+- Range pills: 6 months, 12 months, All.
+- Four tiles for the range: earned, spent, invested, saved. When zoomed: the total, monthly average, share of income.
+- Column chart per month: earned beside money out, stacked by the four categories. Click a colour (or its legend
+  entry) to zoom: a category splits into its subcategories (Savings adds "Left over"), and a subcategory splits
+  into its biggest items, darkest at the bottom, in shades of its colour. A back link climbs one level.
+- Biggest items in the zoomed view, and "See the numbers" opens a table with every value.
 - Under three months of data, the duck offers "Fill 5 sample months": fixed demo data, tagged "(sample)", only
   in empty months before this one.
 
-### Account
+### Goals
 
-- Sign out
-- Monthly limits: overall, necessities, discretionary, travel (blank = no limit, no meter)
-- Savings goal (amount)
-- Percentage targets: needs (necessities), wants (discretionary + travel), investing (Investments), savings
-  (what is left). Needs and wants are limits; investing and savings are minimums. "Use 50/30/20" fills 50/30/10/10
-- Delete my data (asks to confirm)
+- Percentage targets for the four categories. Needs and wants are limits; investing and savings are minimums.
+  Typing three fills the fourth to make 100. "Use 50/30/20" fills 50/30/10/10.
+- Subcategories, grouped under their category's marker: rename in place, move with a category picker, ✕ to remove
+  your own (only when empty). An add row: name and the category it counts toward.
+- Monthly limits: overall, necessities, discretionary, travel (blank = no limit, no meter). Savings goal.
+
+### Profile (avatar menu, then Edit profile)
+
+- Name (also the sign-in name) and email; change password (current, new, again); delete my data (asks to
+  confirm). Replaces the tabs until "← Back"; Sign out is in the same menu.
 
 ## 3. Code structure
 
@@ -107,9 +118,9 @@ Four modules, one owner each, so teammates rarely edit the same file.
 
 ```
 sliced-bread/
-  app.py            Gradio UI: sign-in, Budget tab, Account tab. Only file that imports gradio.
+  app.py            Gradio UI: sign-in, Budget, History and Goals tabs, profile. Only file that imports gradio.
   budget.py         Pure logic: totals, leftover, meter state, savings progress, input validation
-  storage.py        Read/write one JSON budget per name (demo mode: no passwords)
+  storage.py        Read/write one JSON budget per name, with a salted PBKDF2 password hash
   design.py         The design system in code: Gradio theme + one CSS string
   charts.py         History tab: column chart, tiles, table (plain HTML, no Gradio)
   test_budget.py    pytest for budget.py and storage.py
@@ -123,15 +134,20 @@ sliced-bread/
 
 ```json
 {
+  "account": {"name": "Mark", "email": "", "salt": "(hex)", "password_hash": "(hex)"},
   "settings": {"savings_goal": 500000,
-               "limits": {"overall": 250000, "necessities": 180000, "discretionary": 30000, "travel": 20000}},
+               "limits": {"overall": 250000, "necessities": 180000, "discretionary": 30000, "travel": 20000},
+               "targets": {"needs": 50, "wants": 30, "investing": 10, "savings": 10},
+               "subcategories": [{"key": "necessities", "name": "Necessities", "category": "needs"},
+                                 {"key": "pets", "name": "Pets", "category": "wants"}]},
   "months": {"2026-10": {"income": [{"name": "Salary", "amount": 300000}],
-                          "necessities": [], "discretionary": [], "travel": []}}
+                          "necessities": [], "pets": [{"name": "Vet", "amount": 6000}]}}
 }
 ```
 
-Savings are never stored; they're always computed. Savings progress = sum of positive leftovers
-across all months.
+A subcategory's key never changes (a rename only changes its name), so past months stay attached. Budgets saved
+before subcategories get the four starting ones. Savings are never stored; they're always computed: set aside in
+Savings subcategories plus whatever is left of income.
 
 **Gradio specifics** — `gr.Blocks` + `gr.State` for the signed-in user; each section's lines rendered
 with `@gr.render` so the list grows and shrinks; `demo.launch(share=True)` when running in Colab so the
@@ -244,7 +260,7 @@ border and progress overlay are switched off. Keyboard focus keeps a thin 2 px g
 | 2. `storage.py` + tests | Create account, sign in, save/load a month round-trips |
 | 3. `design.py` | Theme + CSS render on a blank Blocks page |
 | 4. Budget tab | Five sections, add/delete, hero + bar, month picker |
-| 5. Account tab | Limits, savings goal, targets, sign out, delete my data |
+| 5. Goals tab + profile | Limits, savings goal, targets, subcategories; profile, password, sign out, delete my data |
 | 6. Check | Tests pass; clicked through at 375 px and desktop; runs from a fresh Colab |
 
 Validation handled in step 1: empty names, non-numbers, negatives, zero, more than 2 decimals, absurd
@@ -282,6 +298,7 @@ With 4 members, A takes D's work.
 
 ## Known limitations (to state in the presentation)
 
-- Demo mode: any name and password sign in, and anyone who types your name sees your budget. Real accounts are future work.
+- Passwords are hashed, but they live in the same JSON file as the budget, a new name creates a new budget, and
+  there is no rate limiting or password reset. Fine for a class demo, not for real money.
 - Colab data disappears on runtime reset unless Drive is mounted.
 - One currency (USD); no bank sync.

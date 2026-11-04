@@ -3,8 +3,13 @@
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/sourypink/Sliced-Bread/blob/main/Sliced_Bread.ipynb)
 
 A personal budget tracker in Python and Gradio. Add your income and spending; it tells you how much is
-left to save each month after spending and investing (grouped into tiers you name), warns you near and
-over your limits, checks your split against targets like 50/30/20, and tracks a savings goal.
+left to save each month, warns you near and over your limits, checks your split against targets like
+50/30/20, and tracks a savings goal.
+
+Money goes into four fixed **categories** (Needs, Wants, Investing, Savings). Each category holds
+**subcategories**: Necessities, Discretionary, Travel and Investments to start, plus any you add on the Goals
+tab and place in one of the four. Each subcategory holds **items**, like Rent. A small marker on every card
+shows which category it counts toward.
 
 ## Run it in Google Colab
 
@@ -42,21 +47,22 @@ python -m pytest
 
 | File | What it does |
 |---|---|
-| `app.py` | The Gradio screens: sign in, Budget tab, Account tab. The only file that uses Gradio. |
-| `budget.py` | The math: totals, what's left, limit alerts, savings progress, input checks. |
-| `storage.py` | Saves each name's budget as a JSON file. Demo mode: no passwords. |
-| `charts.py` | The History tab's column chart, tiles and table, in plain HTML. |
+| `app.py` | The Gradio screens: sign in, the Budget, History and Goals tabs, and the profile page. The only file that uses Gradio. |
+| `budget.py` | The math: categories and subcategories, totals, what's left, limit and target alerts, input checks. |
+| `storage.py` | Saves each name's budget as a JSON file, with a salted password hash. |
+| `charts.py` | The History tab's chart (categories, then a subcategory, then its items), tiles and table, in plain HTML. |
 | `design.py` | "Pond", the design system: colours, type, spacing, the Gradio theme, CSS and the mallard mascot. |
 | `test_budget.py` | Tests for `budget.py` and `storage.py`. |
 | `build_notebook.py` | Rebuilds `Sliced_Bread.ipynb` from the files above. |
 | `Sliced_Bread.ipynb` | The Colab notebook: all the code, the tests and the running app. |
 | `PLAN.md` | The plan: features, screens, design system, timeline and roles. |
 
-Money is stored in whole cents so totals never drift. Savings aren't stored: they're always income
-minus spending and investing.
+Money is stored in whole cents so totals never drift. Savings are never stored: they are what you set aside
+in Savings subcategories plus whatever is left of income.
 
 ## Known limitations
 
-- Demo mode: any name and password sign in, and anyone who types your name sees your budget.
+- A new name creates a new budget, and passwords live in the same JSON file as the budget. Fine for a class
+  demo, not for real money: there is no server-side account system, rate limiting or password reset.
 - In Colab, data disappears on a runtime reset unless Google Drive is mounted.
 - US dollars only; no bank connection; no recurring items yet (rent must be added each month).
