@@ -1,16 +1,27 @@
 """Budget math for Sliced Bread: pure functions, no Gradio, all money in whole cents."""
 
+import re
 from datetime import date
 
-# The page reads top to bottom in this order; savings (what is left) is computed, never stored.
-SECTIONS = ("income", "necessities", "discretionary", "travel", "investments")
-EXPENSE_SECTIONS = ("necessities", "discretionary", "travel")  # spending: what limits and "spent" cover
-LIMIT_KEYS = ("overall",) + EXPENSE_SECTIONS
+# Money comes in as income and goes out into subcategories (Rent goes in Necessities). Every subcategory sits in
+# one of four fixed categories, which the percentage targets and History are built on.
+INCOME = "income"
+CATEGORIES = ("needs", "wants", "investing", "savings")
+CATEGORY_NAMES = {"needs": "Needs", "wants": "Wants", "investing": "Investing", "savings": "Savings"}
+SPENDING_CATEGORIES = ("needs", "wants")  # what limits and "spent" cover; investing and savings are minimums
+PRESET_SUBCATEGORIES = (
+    {"key": "necessities", "name": "Necessities", "category": "needs"},
+    {"key": "discretionary", "name": "Discretionary", "category": "wants"},
+    {"key": "travel", "name": "Travel", "category": "wants"},
+    {"key": "investments", "name": "Investments", "category": "investing"},
+)
+PRESET_KEYS = tuple(preset["key"] for preset in PRESET_SUBCATEGORIES)
+MAX_CUSTOM_SUBCATEGORIES = 8
+ALL_SPENDING = "All spending"  # History's unzoomed view
+LIMIT_KEYS = ("overall", "necessities", "discretionary", "travel")  # custom subcategories have no limit
 TIERED_SECTION = "investments"  # its lines belong to a tier the user names, like "Retirement"
+UNSAFE_KEY_CHARACTERS = re.compile(r"[^a-z0-9]+")
 
-# Percentage targets: needs and wants are limits; investing and savings are minimums to reach.
-TARGET_KEYS = ("needs", "wants", "investing", "savings")
-TARGET_GROUPS = {"needs": ("necessities",), "wants": ("discretionary", "travel")}
 RULE_50_30_20 = {"needs": 50, "wants": 30, "investing": 10, "savings": 10}  # the 20 split between the two
 PERCENT_WHOLE = 100
 
@@ -18,11 +29,6 @@ WARN_AT = 0.9  # share of a limit at which the meter turns to "near limit"
 MAX_AMOUNT_CENTS = 10_000_000 * 100  # $10M; anything larger is a typo
 MAX_NAME_LENGTH = 40  # characters
 CENTS_PER_DOLLAR = 100
-
-
-def empty_month():
-    """A month with every section present and empty."""
-    return {section: [] for section in SECTIONS}
 
 
 def empty_budget():
@@ -98,24 +104,131 @@ def format_money(cents):
     return f"{sign}${dollars:,}"
 
 
+# ---------- Subcategories ----------
+
+def subcategories(budget):
+    """Every subcategory in page order within its category. Budgets saved before subcategories get the presets."""
+    return budget["settings"].get("subcategories") or [dict(preset) for preset in PRESET_SUBCATEGORIES]
+
+
+def editable_subcategories(budget):
+    """The stored list to change, written out from the presets the first time."""
+    return budget["settings"].setdefault("subcategories", subcategories(budget))
+
+
+def subcategories_in(budget, category):
+    return [sub for sub in subcategories(budget) if sub["category"] == category]
+
+
+def section_keys(budget):
+    """Income first, then every subcategory key: what a month holds lines under."""
+    return [INCOME] + [sub["key"] for sub in subcategories(budget)]
+
+
+def find_subcategory(budget, key):
+    for sub in editable_subcategories(budget):
+        if sub["key"] == key:
+            return sub
+    raise ValueError(f"Unknown subcategory: {key}")
+
+
+def check_category(category):
+    if category not in CATEGORIES:
+        raise ValueError("Pick a category: Needs, Wants, Investing or Savings")
+
+
+def unused_name(budget, name_text, except_key=None):
+    """A cleaned subcategory name nobody else has, ignoring capitals."""
+    name = clean_name(name_text)
+    # History zooms by clicking a name, so a subcategory can't share one with a category or the unzoomed view.
+    reserved = {INCOME, ALL_SPENDING.lower()} | {category_name.lower() for category_name in CATEGORY_NAMES.values()}
+    taken = {sub["name"].lower() for sub in subcategories(budget) if sub["key"] != except_key} | reserved
+    if name.lower() in taken:
+        raise ValueError(f"You already have {name}")
+    return name
+
+
+def add_subcategory(budget, name_text, category):
+    """A new subcategory of the user's own, at the end of its category; returns it."""
+    check_category(category)
+    name = unused_name(budget, name_text)
+    subs = editable_subcategories(budget)
+    if sum(sub["key"] not in PRESET_KEYS for sub in subs) >= MAX_CUSTOM_SUBCATEGORIES:
+        raise ValueError(f"You can add up to {MAX_CUSTOM_SUBCATEGORIES} of your own subcategories")
+    # The key is fixed for good, so a rename never detaches past months' lines.
+    base = UNSAFE_KEY_CHARACTERS.sub("_", name.lower()).strip("_") or "subcategory"
+    taken = set(section_keys(budget))
+    key, number = base, 2
+    while key in taken:
+        key, number = f"{base}_{number}", number + 1
+    sub = {"key": key, "name": name, "category": category}
+    subs.append(sub)
+    return sub
+
+
+def rename_subcategory(budget, key, name_text):
+    find_subcategory(budget, key)["name"] = unused_name(budget, name_text, except_key=key)
+
+
+def move_subcategory(budget, key, category):
+    """Put a subcategory under another category. It goes to the end of that category's list."""
+    check_category(category)
+    subs = editable_subcategories(budget)
+    sub = find_subcategory(budget, key)
+    if sub["category"] != category:
+        subs.remove(sub)
+        subs.append({**sub, "category": category})
+
+
+def remove_subcategory(budget, key):
+    """Delete one of the user's own subcategories. Refused while any month has lines in it, so nothing is lost."""
+    sub = find_subcategory(budget, key)
+    if key in PRESET_KEYS:
+        raise ValueError(f"{sub['name']} is built in and can't be removed")
+    used = sum(1 for month in budget["months"].values() if month.get(key))
+    if used:
+        plural = "s" if used > 1 else ""
+        raise ValueError(f"{sub['name']} has items in {used} month{plural}. Delete them first.")
+    editable_subcategories(budget).remove(sub)
+    for month in budget["months"].values():
+        month.pop(key, None)
+
+
+# ---------- Totals ----------
+
 def section_total(month, section):
     """Sum of every line in one section."""
     return sum(item["amount"] for item in month.get(section, []))
 
 
-def total_expenses(month):
-    """Necessities + discretionary + travel."""
-    return sum(section_total(month, section) for section in EXPENSE_SECTIONS)
+def category_total(budget, month, category):
+    """Sum of every subcategory in one category."""
+    return sum(section_total(month, sub["key"]) for sub in subcategories_in(budget, category))
 
 
-def total_invested(month):
-    """Everything put into investments this month, across all tiers."""
-    return section_total(month, TIERED_SECTION)
+def total_expenses(budget, month):
+    """Needs + wants: what limits and "spent" cover."""
+    return sum(category_total(budget, month, category) for category in SPENDING_CATEGORIES)
 
 
-def leftover(month):
-    """Income minus spending minus investing: what is saved. Negative means over budget."""
-    return section_total(month, "income") - total_expenses(month) - total_invested(month)
+def total_invested(budget, month):
+    """Everything put into investing subcategories this month."""
+    return category_total(budget, month, "investing")
+
+
+def total_set_aside(budget, month):
+    """Money moved into savings subcategories on purpose, like an emergency fund."""
+    return category_total(budget, month, "savings")
+
+
+def leftover(budget, month):
+    """Income minus everything that went out. Negative means over budget."""
+    return section_total(month, INCOME) - sum(category_total(budget, month, category) for category in CATEGORIES)
+
+
+def saved(budget, month):
+    """Set aside plus whatever is left over (never below the set-aside)."""
+    return total_set_aside(budget, month) + max(leftover(budget, month), 0)
 
 
 def meter(spent, limit):
@@ -131,14 +244,16 @@ def meter(spent, limit):
 
 
 def savings_progress(budget):
-    """Saved so far: the positive leftovers of every month added up."""
-    return sum(max(0, leftover(month)) for month in budget["months"].values())
+    """Saved so far, every month added up."""
+    return sum(saved(budget, get_month(budget, key)) for key in budget["months"])
 
+
+# ---------- Lines ----------
 
 def editable_month(budget, month_key):
-    """The stored month to change, created if new, with every section present (older saves lack investments)."""
-    month = budget["months"].setdefault(month_key, empty_month())
-    for section in SECTIONS:
+    """The stored month to change, created if new, with every section present (older saves lack some)."""
+    month = budget["months"].setdefault(month_key, {})
+    for section in section_keys(budget):
         month.setdefault(section, [])
     return month
 
@@ -153,7 +268,7 @@ def same_tier_as_before(budget, item):
 
 def add_item(budget, month_key, section, name_text, amount_text, tier_text=None):
     """Validate and add a line to a section; returns the added item."""
-    if section not in SECTIONS:
+    if section not in section_keys(budget):
         raise ValueError(f"Unknown section: {section}")
     item = same_tier_as_before(budget, make_item(section, name_text, amount_text, tier_text))
     editable_month(budget, month_key)[section].append(item)
@@ -187,21 +302,57 @@ def tiers(budget):
     return list(seen)
 
 
+# ---------- Percentage targets ----------
+
+def target_number(text):
+    """A typed percentage as a whole number from 0 to 100, or None if it isn't one."""
+    cleaned = str(text if text is not None else "").strip().rstrip("%").strip()
+    return int(cleaned) if cleaned.isdigit() and int(cleaned) <= PERCENT_WHOLE else None
+
+
+def is_blank(text):
+    return not str(text if text is not None else "").strip()
+
+
 def parse_targets(needs_text, wants_text, investing_text, savings_text):
     """Turn four typed percentages into targets. All blank means targets are off ({})."""
-    typed = dict(zip(TARGET_KEYS, (needs_text, wants_text, investing_text, savings_text)))
-    cleaned = {key: str(text if text is not None else "").strip().rstrip("%").strip() for key, text in typed.items()}
-    if not any(cleaned.values()):
+    typed = dict(zip(CATEGORIES, (needs_text, wants_text, investing_text, savings_text)))
+    if all(is_blank(text) for text in typed.values()):
         return {}
     targets = {}
-    for key, text in cleaned.items():
-        if not text.isdigit() or int(text) > PERCENT_WHOLE:
-            raise ValueError(f"{key.capitalize()} must be a whole number from 0 to 100")
-        targets[key] = int(text)
+    for key, text in typed.items():
+        targets[key] = target_number(text)
+        if targets[key] is None:
+            raise ValueError(f"{CATEGORY_NAMES[key]} must be a whole number from 0 to 100")
     total = sum(targets.values())
     if total != PERCENT_WHOLE:
         raise ValueError(f"Targets must add up to 100% (now {total}%)")
     return targets
+
+
+def complete_targets(texts, auto_key, edited_key):
+    """Fill the one blank target box with what makes 100, and keep it in step while the other three change.
+
+    Returns the four box texts and the box filled in for the user (None once they type in it themselves). The box
+    that changed is never rewritten, so the caller only needs to update the other three.
+    """
+    values = dict(zip(CATEGORIES, texts))
+
+    def remainder(key):
+        others = [target_number(text) for other, text in values.items() if other != key]
+        return str(PERCENT_WHOLE - sum(others)) if None not in others and sum(others) <= PERCENT_WHOLE else ""
+
+    if edited_key == auto_key:
+        # The filled-in box changed: either this function's own update, or the user typing over it.
+        return list(texts), auto_key if values[auto_key] == remainder(auto_key) else None
+    if auto_key is None:
+        blanks = [key for key, text in values.items() if is_blank(text)]
+        # Never fill the box being typed in: clearing a box means the user is about to type a new number there.
+        if len(blanks) != 1 or edited_key in blanks or not remainder(blanks[0]):
+            return list(texts), None
+        auto_key = blanks[0]
+    values[auto_key] = remainder(auto_key)
+    return [values[key] for key in CATEGORIES], auto_key
 
 
 def minimum_meter(reached, goal):
@@ -213,26 +364,29 @@ def minimum_meter(reached, goal):
     return {"state": "warn", "fraction": reached / goal, "label": f"{format_money(goal - reached)} short"}
 
 
-def target_meters(targets, month):
-    """Each target's meter, with the actual and target percent of income. Empty when off or no income."""
-    income = section_total(month, "income")
+def target_meters(budget, targets, month):
+    """Each category's meter, with the actual and target percent of income. Empty when off or no income."""
+    income = section_total(month, INCOME)
     # Targets saved before investing had its own share have three keys; they count as off.
-    if set(targets) != set(TARGET_KEYS) or income <= 0:
+    if set(targets) != set(CATEGORIES) or income <= 0:
         return {}
+    reached = {category: category_total(budget, month, category) for category in CATEGORIES}
+    reached["savings"] = saved(budget, month)
     meters = {}
-    for key, sections in TARGET_GROUPS.items():
-        spent = sum(section_total(month, section) for section in sections)
-        result = meter(spent, income * targets[key] // PERCENT_WHOLE)
-        meters[key] = {**result, "actual_percent": round(spent * PERCENT_WHOLE / income), "target_percent": targets[key]}
-    for key, reached in (("investing", total_invested(month)), ("savings", max(leftover(month), 0))):
-        result = minimum_meter(reached, income * targets[key] // PERCENT_WHOLE)
-        meters[key] = {**result, "actual_percent": round(reached * PERCENT_WHOLE / income), "target_percent": targets[key]}
+    for category in CATEGORIES:
+        goal = income * targets[category] // PERCENT_WHOLE
+        check = meter if category in SPENDING_CATEGORIES else minimum_meter
+        meters[category] = {
+            **check(reached[category], goal),
+            "actual_percent": round(reached[category] * PERCENT_WHOLE / income),
+            "target_percent": targets[category],
+        }
     return meters
 
 
 def get_month(budget, month_key):
     """The month's data with every section present, or an empty month if nothing was entered yet."""
-    return {**empty_month(), **budget["months"].get(month_key, {})}
+    return {**{section: [] for section in section_keys(budget)}, **budget["months"].get(month_key, {})}
 
 
 def month_key(day=None):
@@ -285,23 +439,23 @@ SAMPLE_MONTHS = [
      ("necessities", "Gas", 115), ("discretionary", "Movies", 45), ("discretionary", "Streaming", 28),
      ("travel", "Weekend train", 90), SAMPLE_ROTH, SAMPLE_INDEX],
 ]
-CHART_SECTIONS = EXPENSE_SECTIONS + (TIERED_SECTION,)  # what History stacks in a month's outgoing column
-
-
 def month_history(budget, end_key, count):
     """One row per month, oldest first, ending at end_key. Months with nothing entered are zeros."""
     rows = []
     for steps in range(count - 1, -1, -1):
         key = shift_month(end_key, -steps)
         month = get_month(budget, key)
+        left = leftover(budget, month)
         rows.append({
             "key": key,
             "label": month_name(key)[:3],
-            "income": section_total(month, "income"),
-            "spent": total_expenses(month),
-            "invested": total_invested(month),
-            "left": leftover(month),
-            "sections": {section: section_total(month, section) for section in CHART_SECTIONS},
+            "income": section_total(month, INCOME),
+            "spent": total_expenses(budget, month),
+            "invested": total_invested(budget, month),
+            "left": left,
+            "saved": total_set_aside(budget, month) + left,  # negative when over budget
+            "categories": {category: category_total(budget, month, category) for category in CATEGORIES},
+            "subcategories": {sub["key"]: section_total(month, sub["key"]) for sub in subcategories(budget)},
         })
     return rows
 
