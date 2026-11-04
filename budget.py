@@ -2,15 +2,16 @@
 
 from datetime import date
 
-# The page reads top to bottom in this order; investments are computed, never stored.
-SECTIONS = ("income", "necessities", "discretionary", "travel")
-EXPENSE_SECTIONS = ("necessities", "discretionary", "travel")
+# The page reads top to bottom in this order; savings (what is left) is computed, never stored.
+SECTIONS = ("income", "necessities", "discretionary", "travel", "investments")
+EXPENSE_SECTIONS = ("necessities", "discretionary", "travel")  # spending: what limits and "spent" cover
 LIMIT_KEYS = ("overall",) + EXPENSE_SECTIONS
+TIERED_SECTION = "investments"  # its lines belong to a tier the user names, like "Retirement"
 
-# Percentage targets: which sections count as needs and wants. Savings is whatever is left.
-TARGET_KEYS = ("needs", "wants", "savings")
+# Percentage targets: needs and wants are limits; investing and savings are minimums to reach.
+TARGET_KEYS = ("needs", "wants", "investing", "savings")
 TARGET_GROUPS = {"needs": ("necessities",), "wants": ("discretionary", "travel")}
-RULE_50_30_20 = {"needs": 50, "wants": 30, "savings": 20}
+RULE_50_30_20 = {"needs": 50, "wants": 30, "investing": 10, "savings": 10}  # the 20 split between the two
 PERCENT_WHOLE = 100
 
 WARN_AT = 0.9  # share of a limit at which the meter turns to "near limit"
@@ -70,6 +71,24 @@ def clean_name(text):
     return name
 
 
+def clean_tier(text):
+    """Trim an investment tier's name, or raise ValueError if it is unusable."""
+    tier = " ".join(str(text if text is not None else "").split())
+    if not tier:
+        raise ValueError("Enter a tier, like Retirement")
+    if len(tier) > MAX_NAME_LENGTH:
+        raise ValueError(f"Tier must be {MAX_NAME_LENGTH} characters or fewer")
+    return tier
+
+
+def make_item(section, name_text, amount_text, tier_text=None):
+    """A validated line. Investment lines also carry their tier."""
+    item = {"name": clean_name(name_text), "amount": parse_amount(amount_text)}
+    if section == TIERED_SECTION:
+        item["tier"] = clean_tier(tier_text)
+    return item
+
+
 def format_money(cents):
     """$1,200 for whole dollars, $12.50 otherwise, -$85 when negative."""
     sign = "-" if cents < 0 else ""
@@ -89,9 +108,14 @@ def total_expenses(month):
     return sum(section_total(month, section) for section in EXPENSE_SECTIONS)
 
 
+def total_invested(month):
+    """Everything put into investments this month, across all tiers."""
+    return section_total(month, TIERED_SECTION)
+
+
 def leftover(month):
-    """Income minus expenses: what goes to investments. Negative means over budget."""
-    return section_total(month, "income") - total_expenses(month)
+    """Income minus spending minus investing: what is saved. Negative means over budget."""
+    return section_total(month, "income") - total_expenses(month) - total_invested(month)
 
 
 def meter(spent, limit):
@@ -111,37 +135,61 @@ def savings_progress(budget):
     return sum(max(0, leftover(month)) for month in budget["months"].values())
 
 
-def add_item(budget, month_key, section, name_text, amount_text):
+def editable_month(budget, month_key):
+    """The stored month to change, created if new, with every section present (older saves lack investments)."""
+    month = budget["months"].setdefault(month_key, empty_month())
+    for section in SECTIONS:
+        month.setdefault(section, [])
+    return month
+
+
+def same_tier_as_before(budget, item):
+    """Typing "retirement" files the line under an existing "Retirement" tier rather than a new one."""
+    if "tier" in item:
+        existing = {tier.lower(): tier for tier in tiers(budget)}
+        item["tier"] = existing.get(item["tier"].lower(), item["tier"])
+    return item
+
+
+def add_item(budget, month_key, section, name_text, amount_text, tier_text=None):
     """Validate and add a line to a section; returns the added item."""
     if section not in SECTIONS:
         raise ValueError(f"Unknown section: {section}")
-    item = {"name": clean_name(name_text), "amount": parse_amount(amount_text)}
-    month = budget["months"].setdefault(month_key, empty_month())
-    month[section].append(item)
+    item = same_tier_as_before(budget, make_item(section, name_text, amount_text, tier_text))
+    editable_month(budget, month_key)[section].append(item)
     return item
 
 
 def remove_item(budget, month_key, section, index):
     """Delete one line from a section by its position."""
-    items = budget["months"].get(month_key, empty_month())[section]
+    items = editable_month(budget, month_key)[section]
     if not 0 <= index < len(items):
         raise IndexError(f"No line {index} in {section}")
     items.pop(index)
 
 
-def update_item(budget, month_key, section, index, name_text, amount_text):
+def update_item(budget, month_key, section, index, name_text, amount_text, tier_text=None):
     """Validate and replace one line; returns the new item."""
-    items = budget["months"].get(month_key, empty_month())[section]
+    items = editable_month(budget, month_key)[section]
     if not 0 <= index < len(items):
         raise IndexError(f"No line {index} in {section}")
-    item = {"name": clean_name(name_text), "amount": parse_amount(amount_text)}
+    item = same_tier_as_before(budget, make_item(section, name_text, amount_text, tier_text))
     items[index] = item
     return item
 
 
-def parse_targets(needs_text, wants_text, savings_text):
-    """Turn three typed percentages into targets. All blank means targets are off ({})."""
-    typed = dict(zip(TARGET_KEYS, (needs_text, wants_text, savings_text)))
+def tiers(budget):
+    """Every investment tier used in any month, in the order they were first used."""
+    seen = {}
+    for key in sorted(budget["months"]):
+        for item in get_month(budget, key)[TIERED_SECTION]:
+            seen.setdefault(item["tier"], None)
+    return list(seen)
+
+
+def parse_targets(needs_text, wants_text, investing_text, savings_text):
+    """Turn four typed percentages into targets. All blank means targets are off ({})."""
+    typed = dict(zip(TARGET_KEYS, (needs_text, wants_text, investing_text, savings_text)))
     cleaned = {key: str(text if text is not None else "").strip().rstrip("%").strip() for key, text in typed.items()}
     if not any(cleaned.values()):
         return {}
@@ -156,31 +204,35 @@ def parse_targets(needs_text, wants_text, savings_text):
     return targets
 
 
+def minimum_meter(reached, goal):
+    """A target to reach rather than stay under: short is amber, reaching it is good."""
+    if goal <= 0:
+        return {"state": "none", "fraction": 0.0, "label": ""}
+    if reached >= goal:
+        return {"state": "good", "fraction": 1.0, "label": "On target"}
+    return {"state": "warn", "fraction": reached / goal, "label": f"{format_money(goal - reached)} short"}
+
+
 def target_meters(targets, month):
     """Each target's meter, with the actual and target percent of income. Empty when off or no income."""
     income = section_total(month, "income")
-    if not targets or income <= 0:
+    # Targets saved before investing had its own share have three keys; they count as off.
+    if set(targets) != set(TARGET_KEYS) or income <= 0:
         return {}
     meters = {}
     for key, sections in TARGET_GROUPS.items():
         spent = sum(section_total(month, section) for section in sections)
         result = meter(spent, income * targets[key] // PERCENT_WHOLE)
         meters[key] = {**result, "actual_percent": round(spent * PERCENT_WHOLE / income), "target_percent": targets[key]}
-    saved = max(leftover(month), 0)
-    goal = income * targets["savings"] // PERCENT_WHOLE
-    if goal <= 0:
-        result = {"state": "none", "fraction": 0.0, "label": ""}
-    elif saved >= goal:
-        result = {"state": "good", "fraction": 1.0, "label": "On target"}
-    else:
-        result = {"state": "warn", "fraction": saved / goal, "label": f"{format_money(goal - saved)} short"}
-    meters["savings"] = {**result, "actual_percent": round(saved * PERCENT_WHOLE / income), "target_percent": targets["savings"]}
+    for key, reached in (("investing", total_invested(month)), ("savings", max(leftover(month), 0))):
+        result = minimum_meter(reached, income * targets[key] // PERCENT_WHOLE)
+        meters[key] = {**result, "actual_percent": round(reached * PERCENT_WHOLE / income), "target_percent": targets[key]}
     return meters
 
 
 def get_month(budget, month_key):
-    """The month's data, or an empty month if nothing was entered yet."""
-    return budget["months"].get(month_key, empty_month())
+    """The month's data with every section present, or an empty month if nothing was entered yet."""
+    return {**empty_month(), **budget["months"].get(month_key, {})}
 
 
 def month_key(day=None):
@@ -213,23 +265,27 @@ HISTORY_RANGES = {"6 months": 6, "12 months": 12}  # "All" is the third choice, 
 MAX_HISTORY_MONTHS = 24  # columns stay readable up to two years
 SAMPLE_TAG = " (sample)"
 
-# Five believable earlier months for demos, oldest first: (section, name, dollars).
+# Five believable earlier months for demos, oldest first: (section, name, dollars), plus a tier for investments.
+SAMPLE_ROTH = ("investments", "Roth IRA", 250, "Retirement")
+SAMPLE_INDEX = ("investments", "Index fund", 150, "Brokerage")
 SAMPLE_MONTHS = [
     [("income", "Salary", 3000), ("necessities", "Rent", 1200), ("necessities", "Groceries", 340),
-     ("necessities", "Gas", 110), ("discretionary", "Streaming", 28), ("discretionary", "Dinner out", 90)],
+     ("necessities", "Gas", 110), ("discretionary", "Streaming", 28), ("discretionary", "Dinner out", 90),
+     SAMPLE_ROTH],
     [("income", "Salary", 3000), ("income", "Freelance", 250), ("necessities", "Rent", 1200),
      ("necessities", "Groceries", 365), ("necessities", "Gas", 95), ("discretionary", "Concert tickets", 140),
-     ("discretionary", "Streaming", 28)],
+     ("discretionary", "Streaming", 28), SAMPLE_ROTH, SAMPLE_INDEX],
     [("income", "Salary", 3000), ("necessities", "Rent", 1200), ("necessities", "Groceries", 410),
      ("necessities", "Gas", 120), ("discretionary", "Streaming", 28), ("travel", "Flights", 380),
-     ("travel", "Hotel", 420), ("travel", "Food on the trip", 160)],
+     ("travel", "Hotel", 420), ("travel", "Food on the trip", 160), SAMPLE_ROTH],
     [("income", "Salary", 3000), ("income", "Freelance", 400), ("necessities", "Rent", 1200),
      ("necessities", "Groceries", 350), ("necessities", "Gas", 105), ("discretionary", "Video game", 70),
-     ("discretionary", "Streaming", 28)],
+     ("discretionary", "Streaming", 28), SAMPLE_ROTH, SAMPLE_INDEX],
     [("income", "Salary", 3000), ("necessities", "Rent", 1200), ("necessities", "Groceries", 375),
      ("necessities", "Gas", 115), ("discretionary", "Movies", 45), ("discretionary", "Streaming", 28),
-     ("travel", "Weekend train", 90)],
+     ("travel", "Weekend train", 90), SAMPLE_ROTH, SAMPLE_INDEX],
 ]
+CHART_SECTIONS = EXPENSE_SECTIONS + (TIERED_SECTION,)  # what History stacks in a month's outgoing column
 
 
 def month_history(budget, end_key, count):
@@ -243,8 +299,9 @@ def month_history(budget, end_key, count):
             "label": month_name(key)[:3],
             "income": section_total(month, "income"),
             "spent": total_expenses(month),
+            "invested": total_invested(month),
             "left": leftover(month),
-            "sections": {section: section_total(month, section) for section in EXPENSE_SECTIONS},
+            "sections": {section: section_total(month, section) for section in CHART_SECTIONS},
         })
     return rows
 
@@ -271,7 +328,7 @@ def months_with_data(budget):
 def top_items(budget, keys, section, limit=5):
     """The biggest lines in a section across the given months: (name, month_key, cents), largest first."""
     items = [
-        (item["name"], key, item["amount"])
+        (f"{item['tier']}: {item['name']}" if "tier" in item else item["name"], key, item["amount"])
         for key in keys
         for item in get_month(budget, key)[section]
     ]
@@ -285,7 +342,7 @@ def fill_sample_months(budget, current_key):
         key = shift_month(current_key, -steps)
         if any(get_month(budget, key).values()):
             continue
-        for section, name, dollars in lines:
-            add_item(budget, key, section, name + SAMPLE_TAG, str(dollars))
+        for section, name, dollars, *tier in lines:
+            add_item(budget, key, section, name + SAMPLE_TAG, str(dollars), *tier)
         filled += 1
     return filled

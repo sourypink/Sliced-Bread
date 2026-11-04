@@ -3,8 +3,8 @@
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/sourypink/Sliced-Bread/blob/main/Sliced_Bread.ipynb)
 
 A personal budget tracker in Python and Gradio. Add your income and spending; it tells you how much is
-left to invest each month, warns you near and over your limits, checks your split against targets
-like 50/30/20, and tracks a savings goal.
+left to save each month after spending and investing (grouped into tiers you name), warns you near and
+over your limits, checks your split against targets like 50/30/20, and tracks a savings goal.
 
 ## Run it in Google Colab
 
@@ -52,8 +52,8 @@ python -m pytest
 | `Sliced_Bread.ipynb` | The Colab notebook: all the code, the tests and the running app. |
 | `PLAN.md` | The plan: features, screens, design system, timeline and roles. |
 
-Money is stored in whole cents so totals never drift. Investments aren't stored: they're always income
-minus spending.
+Money is stored in whole cents so totals never drift. Savings aren't stored: they're always income
+minus spending and investing.
 
 ## Known limitations
 

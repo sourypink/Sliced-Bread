@@ -12,7 +12,8 @@ The page reads top to bottom, the way money flows:
 2. **Necessities** — rent, groceries, gas, utilities
 3. **Discretionary** — movies, events, games, subscriptions
 4. **Travel** — trip costs
-5. **Investments** — whatever is left: `income − (necessities + discretionary + travel)`
+5. **Investments** — what you put in, grouped into tiers you name (Retirement, Brokerage, ...)
+6. **Savings** — whatever is left: `income − spending − investing`
 
 No default line items. Each section starts empty with one line of guidance and a **+** button.
 
@@ -27,9 +28,10 @@ Maps to the brief's feature list:
 | Automatic calculations | `budget.py`; every add or delete recomputes |
 | Budget alerts | A meter under each section: near limit at 90%, over at 100% |
 | Monthly summary | The hero line and stacked bar at the top of the page; month picker |
-| Savings goal | Investments section: progress toward the goal set on the account page |
+| Investing with tiers | Investments section: lines grouped under tiers you create by typing a name |
+| Savings goal | Savings card: progress toward the goal set on the account page |
 | History over months | History tab: earned vs spent columns per month (6 / 12 months / All), zoom on one category with the rest greyed, biggest items, a table of every number, and sample months for demos |
-| Percentage targets (50/30/20) | Account page sets needs/wants/savings %; a split card under the hero compares actual vs target and alerts on overspend |
+| Percentage targets (50/30/20) | Account page sets needs/wants/investing/savings % (50/30/20 fills 50/30/10/10); a split card under the hero compares actual vs target and alerts on overspend |
 
 ## 2. Screens
 
@@ -95,7 +97,8 @@ hero says the same.
 - Sign out
 - Monthly limits: overall, necessities, discretionary, travel (blank = no limit, no meter)
 - Savings goal (amount)
-- Percentage targets: needs (necessities), wants (discretionary + travel), savings (what is left); "Use 50/30/20" fills and saves them
+- Percentage targets: needs (necessities), wants (discretionary + travel), investing (Investments), savings
+  (what is left). Needs and wants are limits; investing and savings are minimums. "Use 50/30/20" fills 50/30/10/10
 - Delete my data (asks to confirm)
 
 ## 3. Code structure
@@ -127,7 +130,7 @@ sliced-bread/
 }
 ```
 
-Investments are never stored; they're always computed. Savings progress = sum of positive leftovers
+Savings are never stored; they're always computed. Savings progress = sum of positive leftovers
 across all months.
 
 **Gradio specifics** — `gr.Blocks` + `gr.State` for the signed-in user; each section's lines rendered
@@ -192,11 +195,11 @@ limit, red means over. Status never relies on colour alone: every meter carries 
 | `field-border` | `#958D81` | Text box borders (3.3:1 on white) |
 | `accent` | `#1F7A4D` | Buttons, focus, on-track meters (white text on it: 5.3:1) |
 | `accent-dark` | `#17603C` | Button hover |
-| `accent-soft` | `#E7F1EA` | Add/edit panel, Investments card |
+| `accent-soft` | `#E7F1EA` | Add/edit panel, Savings card |
 | `warn` | `#D99A00` | Meter fill 90–100% |
 | `over` | `#B42318` | Meter fill over 100%, "Over budget" amount |
 
-Section dots, bars and chart columns (fills only): income and investments `accent`, necessities `#2A78D6`,
+Section dots, bars and chart columns (fills only): income and savings `accent`, investments `#6250D6`, necessities `#2A78D6`,
 discretionary `#EB6834`, travel `#1BAF7A`; unpicked categories in a zoomed chart `#D9D4CA`. Checked with the
 dataviz palette validator (all pairs pass, including colour-blind separation); the earlier blue and purple
 did not. The duck has its own colours and they are used nowhere else.

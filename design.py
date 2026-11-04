@@ -33,7 +33,8 @@ SECTION_COLORS = {
     "necessities": "#2A78D6",
     "discretionary": "#EB6834",
     "travel": "#1BAF7A",
-    "investments": ACCENT,
+    "investments": "#6250D6",  # passes on adjacent pairs; stacks keep it away from necessities blue
+    "savings": ACCENT,
 }
 MUTED_FILL = "#D9D4CA"  # the categories you didn't pick, when the History chart zooms in on one
 METER_COLORS = {"good": ACCENT, "warn": WARN, "over": OVER}
@@ -232,6 +233,13 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
 .sb-line {{ display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 16px; }}
 .sb-line-name {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
 
+/* An investment tier's heading inside the Investments card: name and subtotal. */
+.sb-tier {{
+  display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; padding: 6px 12px; border-radius: 10px;
+  background: var(--sb-paper); font-size: 14px; font-weight: 600;
+}}
+.sb-tier-box input {{ font-size: 16px !important; }}
+
 /* Meters: thin, colour in the fill, words underneath. */
 .sb-meter {{ height: 6px; background: var(--sb-line); border-radius: 999px; overflow: hidden; }}
 .sb-meter > span {{ display: block; height: 100%; border-radius: 999px; }}
@@ -289,6 +297,8 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
 
 /* History: stat tiles, the column chart, its legend and table. */
 .sb-tiles {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }}
+.sb-tiles-4 {{ grid-template-columns: repeat(4, 1fr); }}
+@media (max-width: 480px) {{ .sb-tiles-4 {{ grid-template-columns: repeat(2, 1fr); }} }}
 .sb-tile {{ background: var(--sb-card); border: 1px solid var(--sb-line); border-radius: 16px; padding: 14px 16px; }}
 .sb-tile-value {{ font-size: 24px; font-weight: 600; margin-top: 4px; letter-spacing: -0.01em; }}
 .sb-tile-value.sb-over {{ color: var(--sb-over); }}
@@ -310,10 +320,7 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
 .sb-seg {{ min-height: 2px; outline-offset: 1px; }}
 .sb-seg-top {{ border-radius: 4px 4px 0 0; }}
 .sb-seg:hover, .sb-seg:focus-visible {{ filter: brightness(1.12); }}
-.sb-col-label {{
-  position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 6px;
-  font-size: 14px; font-weight: 600; white-space: nowrap;
-}}
+.sb-callout {{ font-size: 14px; font-weight: 600; margin-top: 8px; }}
 .sb-xaxis {{ display: grid; margin: 8px 0 0 52px; font-size: 12px; color: var(--sb-muted); text-align: center; }}
 .sb-xaxis span {{ white-space: nowrap; }}
 .sb-hide-desktop {{ visibility: hidden; }}
@@ -325,7 +332,9 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
 .sb-legend i {{ display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }}
 .sb-details {{ margin-top: 16px; border-top: 1px solid var(--sb-line); padding-top: 12px; }}
 .sb-details summary {{ cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sb-accent-dark); }}
+.sb-table-wrap {{ overflow-x: auto; }}
 .sb-table, .sb-table tr {{ border: none !important; }}
+.sb-table td, .sb-table th {{ white-space: nowrap; }}
 .sb-table {{ width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; font-variant-numeric: tabular-nums; }}
 .sb-table th, .sb-table td {{ text-align: right !important; padding: 8px 4px !important; border: none !important; border-bottom: 1px solid var(--sb-line) !important; background: none !important; }}
 .sb-table th {{ color: var(--sb-muted); font-weight: 500; }}

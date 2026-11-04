@@ -17,18 +17,25 @@ SECTION_NAMES = {
     "discretionary": "Discretionary",
     "travel": "Travel",
     "investments": "Investments",
+    "savings": "Savings",
 }
 EMPTY_STATES = {
     "income": "No income yet. Add your salary, freelance or other pay.",
     "necessities": "Nothing yet. Add rent, groceries, gas.",
     "discretionary": "Nothing yet. Add movies, events, games, subscriptions.",
     "travel": "No trips yet. Add flights, hotels, food.",
+    "investments": "Nothing yet. Add a tier like Retirement, then what you put in.",
 }
-NAME_PLACEHOLDERS = {"income": "Salary", "necessities": "Rent", "discretionary": "Concert tickets", "travel": "Flights"}
+NAME_PLACEHOLDERS = {
+    "income": "Salary", "necessities": "Rent", "discretionary": "Concert tickets", "travel": "Flights", "investments": "Roth IRA",
+}
 LIMIT_LABELS = {"overall": "Monthly limit", **SECTION_NAMES}
-TARGET_LABELS = {"needs": "Needs", "wants": "Wants", "savings": "Savings"}
+TARGET_LABELS = {"needs": "Needs", "wants": "Wants", "investing": "Investing", "savings": "Savings"}
 RANGE_CHOICES = ["6 months", "12 months", "All"]
-CATEGORY_CHOICES = {"All spending": "all", "Necessities": "necessities", "Discretionary": "discretionary", "Travel": "travel"}
+CATEGORY_CHOICES = {
+    "All spending": "all", "Necessities": "necessities", "Discretionary": "discretionary", "Travel": "travel",
+    "Investments": "investments",
+}
 SAMPLE_OFFER_BELOW = 3  # months with data; under this, History offers sample months
 
 def html(value, **options):
@@ -62,7 +69,7 @@ def duck_line(user_budget, key):
         return "Add your income and I'll do the math."
     left = budget.leftover(month)
     if left < 0:
-        return "Quack. Spending is over income this month."
+        return "Quack. Spending and investing are over income this month."
     meters = watched_meters(user_budget, key)
     for label, result in meters.items():
         if result["state"] == "over":
@@ -70,7 +77,7 @@ def duck_line(user_budget, key):
     for label, result in meters.items():
         if result["state"] == "warn":
             return f"Careful, {label.lower()} is near its limit."
-    return f"Nice. {budget.format_money(left)} can go to work."
+    return f"Nice. {budget.format_money(left)} saved this month."
 
 
 def hero_html(user_budget, key):
@@ -82,13 +89,13 @@ def hero_html(user_budget, key):
     name = budget.month_name(key)
 
     if left >= 0:
-        top = f'<div class="sb-eyebrow">Left to invest in {name}</div><div class="sb-hero-amount">{budget.format_money(left)}</div>'
+        top = f'<div class="sb-eyebrow">Left to save in {name}</div><div class="sb-hero-amount">{budget.format_money(left)}</div>'
     else:
         top = f'<div class="sb-eyebrow">Over budget in {name}</div><div class="sb-hero-amount sb-over">{budget.format_money(-left)}</div>'
 
-    amounts = {section: budget.section_total(month, section) for section in budget.EXPENSE_SECTIONS}
-    amounts["investments"] = max(left, 0)
-    whole = max(income, expenses)
+    amounts = {section: budget.section_total(month, section) for section in budget.CHART_SECTIONS}
+    amounts["savings"] = max(left, 0)
+    whole = max(income, expenses + budget.total_invested(month))
     segments = "".join(
         f'<span style="flex:{cents / whole:.4f};background:{design.SECTION_COLORS[section]}"></span>'
         for section, cents in amounts.items() if cents
@@ -122,14 +129,25 @@ def section_head_html(user_budget, month, section):
     )
 
 
-def investments_html(user_budget, key):
+def tier_head_html(tier, cents):
+    return f'<div class="sb-tier"><span>{escape(tier)}</span>{design.money(cents)}</div>'
+
+
+def tier_box(user_budget, value=""):
+    """Type a tier: an existing one (the placeholder lists them) or a new name, which creates it."""
+    used = budget.tiers(user_budget)
+    hint = ", ".join(used) if used else "Retirement"
+    return gr.Textbox(label="Tier", value=value, placeholder=hint, autofocus=not value, min_width=0, elem_classes="sb-tier-box")
+
+
+def savings_html(user_budget, key):
     left = budget.leftover(budget.get_month(user_budget, key))
-    head = f'<div class="sb-title">{design.dot("investments")}Investments</div>'
+    head = f'<div class="sb-title">{design.dot("savings")}Savings</div>'
     amount = f'<div class="sb-big" style="margin-top:12px">{budget.format_money(max(left, 0))}</div>'
     if left < 0:
-        note = f'<div class="sb-note" style="color:var(--sb-over)">Over budget by {budget.format_money(-left)}. Nothing left to invest.</div>'
+        note = f'<div class="sb-note" style="color:var(--sb-over)">Over budget by {budget.format_money(-left)}. Nothing left to save.</div>'
     else:
-        note = '<div class="sb-note">Whatever is left after spending lands here.</div>'
+        note = '<div class="sb-note">Whatever is left after spending and investing lands here.</div>'
     goal = user_budget["settings"]["savings_goal"]
     if goal:
         savings = design.progress_html(budget.savings_progress(user_budget), goal)
@@ -160,7 +178,8 @@ def watched_meters(user_budget, key):
     spent.update({section: budget.section_total(month, section) for section in budget.EXPENSE_SECTIONS})
     meters = {LIMIT_LABELS[limit_key]: budget.meter(spent[limit_key], limits[limit_key]) for limit_key in budget.LIMIT_KEYS}
     targets = budget.target_meters(user_budget["settings"].get("targets", {}), month)
-    meters.update({f"{TARGET_LABELS[target]} target": result for target, result in targets.items() if target != "savings"})
+    # Only needs and wants are limits; investing and savings are minimums, so they never alert.
+    meters.update({f"{TARGET_LABELS[target]} target": result for target, result in targets.items() if target in budget.TARGET_GROUPS})
     return meters
 
 
@@ -185,10 +204,10 @@ def make_open(value):
 
 
 def make_add(section):
-    def add(user, user_budget, key, name, amount):
+    def add(user, user_budget, key, name, amount, tier=None):
         updated = copy.deepcopy(user_budget)
         try:
-            budget.add_item(updated, key, section, name, amount)
+            budget.add_item(updated, key, section, name, amount, tier)
         except ValueError as error:
             raise fail(str(error))
         storage.save_budget(user, updated)
@@ -198,10 +217,10 @@ def make_add(section):
 
 
 def make_update(section, index):
-    def update(user, user_budget, key, name, amount):
+    def update(user, user_budget, key, name, amount, tier=None):
         updated = copy.deepcopy(user_budget)
         try:
-            budget.update_item(updated, key, section, index, name, amount)
+            budget.update_item(updated, key, section, index, name, amount, tier)
         except ValueError as error:
             raise fail(str(error))
         storage.save_budget(user, updated)
@@ -246,8 +265,9 @@ def sign_in(name_text):
 
 
 def target_texts(targets):
-    """Pre-fill for the three target boxes: "50", "30", "20", or blanks when off."""
-    return [str(targets[key]) if targets else "" for key in budget.TARGET_KEYS]
+    """Pre-fill for the four target boxes: "50", "30", "10", "10", or blanks when off."""
+    complete = set(targets) == set(budget.TARGET_KEYS)
+    return [str(targets[key]) if complete else "" for key in budget.TARGET_KEYS]
 
 
 def sign_out():
@@ -268,9 +288,9 @@ def save_settings(user, user_budget, overall, necessities, discretionary, travel
     return updated
 
 
-def save_targets(user, user_budget, needs, wants, savings):
+def save_targets(user, user_budget, needs, wants, investing, savings):
     try:
-        targets = budget.parse_targets(needs, wants, savings)
+        targets = budget.parse_targets(needs, wants, investing, savings)
     except ValueError as error:
         raise fail(str(error))
     updated = copy.deepcopy(user_budget)
@@ -387,13 +407,19 @@ with gr.Blocks(title="Sliced Bread") as demo:
 
                             if is_open:
                                 with gr.Column(elem_classes="sb-panel"):
+                                    # Start in the tier last used this month, so several lines go in one after another.
+                                    last_tier = month[section][-1]["tier"] if section == budget.TIERED_SECTION and month[section] else ""
+                                    tier_input = tier_box(user_budget, last_tier) if section == budget.TIERED_SECTION else None
                                     with gr.Row(elem_classes="sb-row"):
-                                        name_box = gr.Textbox(label="Name", placeholder=NAME_PLACEHOLDERS[section], autofocus=True, scale=3, min_width=0)
+                                        name_box = gr.Textbox(
+                                            label="Name", placeholder=NAME_PLACEHOLDERS[section], autofocus=tier_input is None or bool(last_tier),
+                                            scale=3, min_width=0,
+                                        )
                                         amount_box = gr.Textbox(label="Amount", placeholder="0.00", scale=2, min_width=0)
                                     with gr.Row(elem_classes="sb-row"):
                                         add_button = gr.Button("Add", variant="primary")
                                         cancel_button = gr.Button("Done")
-                                add_inputs = [user_state, budget_state, month_state, name_box, amount_box]
+                                add_inputs = [user_state, budget_state, month_state, name_box, amount_box] + ([tier_input] if tier_input else [])
                                 for trigger in (add_button.click, amount_box.submit, name_box.submit):
                                     trigger(make_add(section), inputs=add_inputs, outputs=[budget_state, name_box, amount_box])
                                 cancel_button.click(lambda: None, outputs=open_state)
@@ -401,29 +427,38 @@ with gr.Blocks(title="Sliced Bread") as demo:
                             items = month[section]
                             if not items and not is_open:
                                 html(f'<div class="sb-note">{EMPTY_STATES[section]}</div>')
-                            for index, item in enumerate(items):
-                                if opened == ("edit", section, index):
-                                    with gr.Column(elem_classes="sb-panel"):
-                                        with gr.Row(elem_classes="sb-row"):
-                                            edit_name = gr.Textbox(label="Name", value=item["name"], autofocus=True, scale=3, min_width=0)
-                                            edit_amount = gr.Textbox(label="Amount", value=dollars_text(item["amount"]), scale=2, min_width=0)
-                                        with gr.Row(elem_classes="sb-row"):
-                                            save_button = gr.Button("Save", variant="primary")
-                                            cancel_edit_button = gr.Button("Cancel")
-                                    edit_inputs = [user_state, budget_state, month_state, edit_name, edit_amount]
-                                    for trigger in (save_button.click, edit_name.submit, edit_amount.submit):
-                                        trigger(make_update(section, index), inputs=edit_inputs, outputs=[budget_state, open_state])
-                                    cancel_edit_button.click(lambda: None, outputs=open_state)
-                                    continue
-                                with gr.Row(elem_classes="sb-row sb-item"):
-                                    html(design.line_html(item["name"], item["amount"]), elem_classes="sb-grow")
-                                    edit = gr.Button("✎", elem_classes="sb-icon", min_width=0, scale=0)
-                                    edit.click(make_open(("edit", section, index)), outputs=open_state)
-                                    remove = gr.Button("✕", elem_classes="sb-icon", min_width=0, scale=0)
-                                    remove.click(make_remove(section, index), inputs=[user_state, budget_state, month_state, open_state], outputs=[budget_state, open_state])
+                            # Investment lines show under their tier; each keeps its real position for edit and delete.
+                            groups = [(None, list(enumerate(items)))]
+                            if section == budget.TIERED_SECTION:
+                                names = list(dict.fromkeys(item["tier"] for item in items))
+                                groups = [(tier, [(i, item) for i, item in enumerate(items) if item["tier"] == tier]) for tier in names]
+                            for tier, lines in groups:
+                                if tier:
+                                    html(tier_head_html(tier, sum(item["amount"] for _, item in lines)))
+                                for index, item in lines:
+                                    if opened == ("edit", section, index):
+                                        with gr.Column(elem_classes="sb-panel"):
+                                            edit_tier = tier_box(user_budget, item["tier"]) if tier else None
+                                            with gr.Row(elem_classes="sb-row"):
+                                                edit_name = gr.Textbox(label="Name", value=item["name"], autofocus=True, scale=3, min_width=0)
+                                                edit_amount = gr.Textbox(label="Amount", value=dollars_text(item["amount"]), scale=2, min_width=0)
+                                            with gr.Row(elem_classes="sb-row"):
+                                                save_button = gr.Button("Save", variant="primary")
+                                                cancel_edit_button = gr.Button("Cancel")
+                                        edit_inputs = [user_state, budget_state, month_state, edit_name, edit_amount] + ([edit_tier] if edit_tier else [])
+                                        for trigger in (save_button.click, edit_name.submit, edit_amount.submit):
+                                            trigger(make_update(section, index), inputs=edit_inputs, outputs=[budget_state, open_state])
+                                        cancel_edit_button.click(lambda: None, outputs=open_state)
+                                        continue
+                                    with gr.Row(elem_classes="sb-row sb-item"):
+                                        html(design.line_html(item["name"], item["amount"]), elem_classes="sb-grow")
+                                        edit = gr.Button("✎", elem_classes="sb-icon", min_width=0, scale=0)
+                                        edit.click(make_open(("edit", section, index)), outputs=open_state)
+                                        remove = gr.Button("✕", elem_classes="sb-icon", min_width=0, scale=0)
+                                        remove.click(make_remove(section, index), inputs=[user_state, budget_state, month_state, open_state], outputs=[budget_state, open_state])
 
                     with gr.Column(elem_classes="sb-card sb-card-accent"):
-                        html(investments_html(user_budget, key))
+                        html(savings_html(user_budget, key))
 
             with gr.Tab("History", id="history"):
                 range_pick = gr.Radio(RANGE_CHOICES, value=RANGE_CHOICES[0], show_label=False, container=False, elem_classes="sb-pills")
@@ -455,12 +490,15 @@ with gr.Blocks(title="Sliced Bread") as demo:
                 with gr.Column(elem_classes="sb-card"):
                     html(
                         '<div class="sb-title">Percentage targets</div><div class="sb-note">Needs are necessities, '
-                        "wants are discretionary and travel, savings is what is left. Leave blank to turn off.</div>"
+                        "wants are discretionary and travel, investing is your Investments section, savings is what is left. "
+                        "Leave blank to turn off.</div>"
                     )
                     with gr.Row():
-                        target_needs = gr.Textbox(label="Needs %", placeholder="Off", min_width=80)
-                        target_wants = gr.Textbox(label="Wants %", placeholder="Off", min_width=80)
-                        target_savings = gr.Textbox(label="Savings %", placeholder="Off", min_width=80)
+                        target_needs = gr.Textbox(label="Needs %", placeholder="Off", min_width=0)
+                        target_wants = gr.Textbox(label="Wants %", placeholder="Off", min_width=0)
+                    with gr.Row():
+                        target_investing = gr.Textbox(label="Investing %", placeholder="Off", min_width=0)
+                        target_savings = gr.Textbox(label="Savings %", placeholder="Off", min_width=0)
                     with gr.Row():
                         use_rule_button = gr.Button("Use 50/30/20")
                         save_targets_button = gr.Button("Save targets", variant="primary")
@@ -478,7 +516,7 @@ with gr.Blocks(title="Sliced Bread") as demo:
 
     limit_boxes = [limit_overall, limit_necessities, limit_discretionary, limit_travel]
     session_outputs = [user_state, budget_state, month_state, open_state, auth_view, app_view]
-    target_boxes = [target_needs, target_wants, target_savings]
+    target_boxes = [target_needs, target_wants, target_investing, target_savings]
     signed_in_outputs = session_outputs + [greeting, app_tabs, *limit_boxes, savings_goal, *target_boxes, login_password]
 
     for trigger in (login_button.click, login_username.submit, login_password.submit):
