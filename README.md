@@ -13,16 +13,18 @@ shows which category it counts toward.
 
 ## Run it in Google Colab
 
-1. Click **Open in Colab** at the top of this page. It always opens the latest version from GitHub.
+1. Click **Open in Colab** at the top of this page. It always opens the latest version from GitHub. The repo
+   is private, so the first time Colab asks you to authorize GitHub: tick "Include private repos". Or
+   download `Sliced_Bread.ipynb` and use File > Upload notebook in Colab.
 2. Runtime > Run all. The app appears inside the last cell, with a public `gradio.live` link above it.
 
 After a push, open the link again rather than re-running a Colab tab you already had open: that tab keeps the
 old copy. If Colab still shows old code, use Runtime > Disconnect and delete runtime first.
 
-The notebook holds every source file as a visible cell, so it is also the copy to hand in.
+The notebook holds every source file as a visible cell, so it is also the copy to hand in. It needs no
+`git clone` and no Google Drive access.
 
-Colab forgets files when the runtime resets. To keep saved budgets between sessions, uncomment the Google
-Drive cell before running the last cell.
+Colab forgets files when the runtime resets, so saved budgets last only for that session.
 
 **Workflow:** the `.py` files in this repo are the source. After changing one, run
 `python build_notebook.py` to rebuild `Sliced_Bread.ipynb`, then commit both. Edits made only inside
@@ -64,5 +66,5 @@ in Savings subcategories plus whatever is left of income.
 
 - A new name creates a new budget, and passwords live in the same JSON file as the budget. Fine for a class
   demo, not for real money: there is no server-side account system, rate limiting or password reset.
-- In Colab, data disappears on a runtime reset unless Google Drive is mounted.
+- In Colab, saved budgets disappear when the runtime resets.
 - US dollars only; no bank connection; no recurring items yet (rent must be added each month).

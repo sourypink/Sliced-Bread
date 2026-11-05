@@ -28,14 +28,6 @@ Every source file is below as its own cell. Each cell starts with `%%writefile`,
 that `.py` file so the files can import each other. This notebook is generated from the files in
 [github.com/sourypink/Sliced-Bread](https://github.com/sourypink/Sliced-Bread) by `build_notebook.py`."""
 
-DRIVE = """# Optional: keep accounts and budgets in Google Drive so they survive a runtime reset.
-# Uncomment and run before the last cell.
-# from google.colab import drive
-# import os
-# drive.mount("/content/drive")
-# os.environ["SLICED_BREAD_DATA"] = "/content/drive/MyDrive/sliced-bread-data"
-"""
-
 # The app runs in its own Python process, not inside this notebook's: a fresh process always uses the packages
 # the install cell just put on disk, even if this notebook loaded older ones earlier. Its output goes to app.log.
 RUN = f"""# Start the app. Run this cell again after changing any file above.
@@ -92,7 +84,6 @@ def build():
     cells.append(markdown("## Run the tests\n\nEvery line should pass."))
     cells.append(code("!python -m pytest -q test_budget.py"))
     cells.append(markdown("## Run the app"))
-    cells.append(code(DRIVE))
     cells.append(code(RUN))
     cells.append(code(LOG))
     notebook = {
