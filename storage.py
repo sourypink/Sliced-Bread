@@ -9,7 +9,7 @@ import secrets
 
 import budget
 
-# Set SLICED_BREAD_DATA to a Google Drive folder in Colab so data survives a runtime reset.
+# Set SLICED_BREAD_DATA to save budgets somewhere other than ./data.
 DATA_DIR = os.environ.get("SLICED_BREAD_DATA", "data")
 MAX_NAME_LENGTH = 30  # characters
 UNSAFE_FILE_CHARACTERS = re.compile(r"[^a-z0-9_-]+")
