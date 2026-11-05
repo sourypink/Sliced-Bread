@@ -10,9 +10,9 @@ Words, used the same way in code and on screen:
 
 - **Category**: one of four, fixed forever: **Needs**, **Wants**, **Investing**, **Savings**. Targets and the
   History chart are built on these, so history stays comparable whatever else changes.
-- **Subcategory**: Necessities (Needs), Discretionary and Travel (Wants), Investments (Investing) to start, plus
-  up to 8 of the user's own. Each sits in exactly one category; on the Goals tab any of them can be renamed or
-  moved, and the user's own can be removed once they hold no items. A small marker ("● Wants") on every card
+- **Subcategory**: Necessities (Needs), Discretionary and Travel (Wants), Investments (Investing), Emergency fund (Savings) to
+  start, plus up to 8 of the user's own. Each sits in exactly one category; from the Goals tab any of them can be
+  renamed or moved, and the user's own can be removed once they hold no items. A small marker ("● Wants") on every card
   says which category it counts toward, and its dot is a shade of that category's colour.
 - **Item**: a line in a subcategory: Rent, Flights. Investments items also carry a tier you name (Retirement).
 
@@ -28,14 +28,14 @@ Maps to the brief's feature list:
 | Income tracking | Income section, total at the top |
 | Expense tracking (amount, category, description) | Sections 2–4; the section *is* the category, the line name is the description |
 | Edit a line | ✎ on a line opens it in place; Save or Cancel |
-| Overall + per-category budgets | Goals tab: a limit for each starting subcategory, plus an overall monthly limit |
+| Overall + per-category budgets | Goals tab: an overall monthly limit plus one each for Needs and Wants |
 | Automatic calculations | `budget.py`; every add or delete recomputes |
-| Budget alerts | A meter under each section: near limit at 90%, over at 100% |
+| Budget alerts | Limit meters under the hero shift from green through amber to red as they fill: near limit at 90%, over at 100% |
 | Monthly summary | The hero line and stacked bar at the top of the page; month picker |
 | Investing with tiers | Investments section: lines grouped under tiers you create by typing a name |
 | Savings goal | Savings card: progress toward the goal set on the Goals tab |
 | History over months | History tab: earned vs money out per month by category (6 / 12 months / All); click a category to see its subcategories, then a subcategory to see its items in shades of its colour; biggest items, a table of every number, and sample months for demos |
-| Percentage targets (50/30/20) | Goals tab sets the four categories' % (50/30/20 fills 50/30/10/10; typing three fills the fourth to make 100); a split card under the hero compares actual vs target and alerts on overspend |
+| Percentage targets (50/30/20) | Goals tab sets the four categories' % (45/30/20/5 for the four; typing three fills the fourth to make 100); a split card under the hero compares actual vs target and alerts on overspend |
 | Own categories | Goals tab: add a subcategory and pick which of the four categories it counts toward |
 | Accounts | Sign in with a name and password (salted hash); the avatar menu has Edit profile (name, email, password, delete my data) and Sign out |
 
@@ -68,14 +68,13 @@ avatar menu. Before sign-in, only the sign-in card.
 │   Salary                          $3,000   × │
 │   Freelance                         $200   × │
 ├──────────────────────────────────────────────┤
-│ ● Necessities           $1,710 of $1,800  [+]│
-│   ██████████████████████████░  Near limit    │  ← meter, only when a limit is set
+│ ● Necessities                     $1,710  [+]│
 │   Rent                            $1,200   × │
 │   Groceries                         $380   × │
 │   Gas                               $130   × │
 ├──────────────────────────────────────────────┤
-│ ● Discretionary            $250 of $300   [+]│
-│ ● Travel                     $0 of $200   [+]│
+│ ● Discretionary                     $250  [+]│
+│ ● Travel                              $0  [+]│
 │   No trips yet. Add flights, hotels, food.   │  ← empty state, one line
 ├──────────────────────────────────────────────┤
 │ ● Investments                        $640    │
@@ -84,7 +83,7 @@ avatar menu. Before sign-in, only the sign-in card.
 └──────────────────────────────────────────────┘
 ```
 
-**+** opens an inline row inside that section: `[Name] [Amount] [Add] [Cancel]`. **×** deletes a line.
+**+** opens an inline row inside that section: `[Name] [Amount] [Add] [Done]`; the + hides while it's open. **×** deletes a line.
 If expenses exceed income, Investments reads **"Over budget by $85"** in the over-limit color and the
 hero says the same.
 
@@ -102,10 +101,11 @@ hero says the same.
 ### Goals
 
 - Percentage targets for the four categories. Needs and wants are limits; investing and savings are minimums.
-  Typing three fills the fourth to make 100. "Use 50/30/20" fills 50/30/10/10.
-- Subcategories, grouped under their category's marker: rename in place, move with a category picker, ✕ to remove
-  your own (only when empty). An add row: name and the category it counts toward.
-- Monthly limits: overall, necessities, discretionary, travel (blank = no limit, no meter). Savings goal.
+  Typing three fills the fourth to make 100. "Use 45/30/20/5" fills 45/30/20/5.
+- "Edit subcategories" opens a pop-up, grouped under each category's marker: rename and move with a category
+  picker, saved together on Confirm (Cancel discards). ✕ removes your own (only when empty) and the add row
+  (name and the category it counts toward) save straight away.
+- Monthly limits, right under the targets: overall, Needs, Wants (blank = no limit, no meter). Savings goal.
 
 ### Profile (avatar menu, then Edit profile)
 
@@ -136,8 +136,8 @@ sliced-bread/
 {
   "account": {"name": "Mark", "email": "", "salt": "(hex)", "password_hash": "(hex)"},
   "settings": {"savings_goal": 500000,
-               "limits": {"overall": 250000, "necessities": 180000, "discretionary": 30000, "travel": 20000},
-               "targets": {"needs": 50, "wants": 30, "investing": 10, "savings": 10},
+               "limits": {"overall": 250000, "needs": 180000, "wants": 50000},
+               "targets": {"needs": 45, "wants": 30, "investing": 20, "savings": 5},
                "subcategories": [{"key": "necessities", "name": "Necessities", "category": "needs"},
                                  {"key": "pets", "name": "Pets", "category": "wants"}]},
   "months": {"2026-10": {"income": [{"name": "Salary", "amount": 300000}],
@@ -146,7 +146,7 @@ sliced-bread/
 ```
 
 A subcategory's key never changes (a rename only changes its name), so past months stay attached. Budgets saved
-before subcategories get the four starting ones. Savings are never stored; they're always computed: set aside in
+before subcategories, or before a starting one was added, get the missing starting ones. Savings are never stored; they're always computed: set aside in
 Savings subcategories plus whatever is left of income.
 
 **Gradio specifics** — `gr.Blocks` + `gr.State` for the signed-in user; each section's lines rendered
