@@ -18,12 +18,14 @@ EMPTY_STATES = {
     "discretionary": "Nothing yet. Add movies, events, games, subscriptions.",
     "travel": "No trips yet. Add flights, hotels, food.",
     "investments": "Nothing yet. Add a tier like Retirement, then what you put in.",
+    "emergency_fund": "Nothing yet. Add what you move into savings.",
 }
 CUSTOM_EMPTY_STATE = "Nothing yet."
 NAME_PLACEHOLDERS = {
     "income": "Salary", "necessities": "Rent", "discretionary": "Concert tickets", "travel": "Flights", "investments": "Roth IRA",
+    "emergency_fund": "Transfer",
 }
-OVERALL_LIMIT_LABEL = "Monthly limit"
+LIMIT_LABELS = {"overall": "Monthly limit", "needs": "Needs limit", "wants": "Wants limit"}  # as alerts name them
 CATEGORY_PICKER_WIDTH = 124  # px: fits "Investing" and the dropdown arrow
 CATEGORY_OPTIONS = [(budget.CATEGORY_NAMES[category], category) for category in budget.CATEGORIES]
 RANGE_CHOICES = ["6 months", "12 months", "All"]
@@ -59,9 +61,16 @@ def sections(user_budget):
     ]
 
 
-def limit_labels(user_budget):
-    names = {sub["key"]: sub["name"] for sub in budget.subcategories(user_budget)}
-    return {key: OVERALL_LIMIT_LABEL if key == "overall" else names[key] for key in budget.LIMIT_KEYS}
+def limit_spent(user_budget, month):
+    """What each limit measures: all spending for the overall one, the category's total for the rest."""
+    spent = {category: budget.category_total(user_budget, month, category) for category in budget.SPENDING_CATEGORIES}
+    return {"overall": budget.total_expenses(user_budget, month), **spent}
+
+
+def limit_meter_label(key, spent, limit):
+    """ "Spent $900 of $1,000" for the overall limit, "Needs $600 of $800" for a category's."""
+    lead = "Spent" if key == "overall" else budget.CATEGORY_NAMES[key]
+    return f"{lead} {budget.format_money(spent)} of {budget.format_money(limit)}"
 
 
 # ---------- Page pieces ----------
@@ -100,7 +109,6 @@ def hero_html(user_budget, key):
     """The big number, where the money went by category, and the duck."""
     month = budget.get_month(user_budget, key)
     income = budget.section_total(month, budget.INCOME)
-    expenses = budget.total_expenses(user_budget, month)
     left = budget.leftover(user_budget, month)
     name = budget.month_name(key)
 
@@ -120,9 +128,13 @@ def hero_html(user_budget, key):
         f"<span>{design.dot(design.CATEGORY_COLORS[category])}{budget.CATEGORY_NAMES[category]} {design.money(cents)}</span>"
         for category, cents in amounts.items() if cents
     )
-    limit = user_budget["settings"]["limits"]["overall"]
-    limit_meter = design.meter_html(
-        budget.meter(expenses, limit), f"Spent {budget.format_money(expenses)} of {budget.format_money(limit)}"
+    limits = user_budget["settings"]["limits"]
+    spent = limit_spent(user_budget, month)
+    limit_meters = "".join(
+        design.meter_html(
+            budget.meter(spent[key], limits.get(key, 0)), limit_meter_label(key, spent[key], limits.get(key, 0)), blend=True
+        )
+        for key in budget.LIMIT_KEYS
     )
     duck = (
         f'<div class="sb-duck-says"><span class="sb-bob">{design.duck_mark(44)}</span>'
@@ -130,21 +142,19 @@ def hero_html(user_budget, key):
     )
     return (
         f'{top}<div class="sb-bar">{segments}</div><div class="sb-key">{key_items}</div>'
-        + (f'<div style="margin-top:16px">{limit_meter}</div>' if limit_meter else "")
+        + (f'<div class="sb-split">{limit_meters}</div>' if limit_meters else "")
         + duck
     )
 
 
 def section_head_html(user_budget, month, section, name, category):
-    """A section's title, the category it counts toward, and its total (of its limit, if set)."""
+    """A section's title, the category it counts toward, and its total."""
     total = budget.section_total(month, section)
-    limit = user_budget["settings"]["limits"].get(section, 0)
     color = design.INCOME_COLOR if category is None else design.subcategory_colors(user_budget)[section]
     marker = design.marker(category) if category else ""
-    of_limit = f'<span class="sb-note">of {budget.format_money(limit)}</span>' if limit else ""
     return (
         f'<div class="sb-head"><div class="sb-title">{design.dot(color)}<span class="sb-title-name">{escape(name)}</span>{marker}</div>'
-        f'<div class="sb-head-total">{design.money(total)}{of_limit}</div></div>'
+        f'<div class="sb-head-total">{design.money(total)}</div></div>'
     )
 
 
@@ -156,7 +166,8 @@ def tier_box(user_budget, value=""):
     """Type a tier: an existing one (the placeholder lists them) or a new name, which creates it."""
     used = budget.tiers(user_budget)
     hint = ", ".join(used) if used else "Retirement"
-    return gr.Textbox(label="Tier", value=value, placeholder=hint, autofocus=not value, min_width=0, elem_classes="sb-tier-box")
+    # interactive=True: Gradio only enables a box by itself when an event writes to it, and the edit form's never do.
+    return gr.Textbox(label="Tier", value=value, placeholder=hint, autofocus=not value, interactive=True, min_width=0, elem_classes="sb-tier-box")
 
 
 def savings_html(user_budget, key):
@@ -189,7 +200,7 @@ def split_html(user_budget, month):
     plan = "/".join(str(targets[category]) for category in budget.CATEGORIES)
     rows = "".join(
         f'<div class="sb-split-row">{design.marker(category)}'
-        f'{design.meter_html(result, f"{result["actual_percent"]}% of {result["target_percent"]}%")}</div>'
+        f'{design.meter_html(result, f"{result["actual_percent"]}% of {result["target_percent"]}%", blend=category in budget.SPENDING_CATEGORIES)}</div>'
         for category, result in meters.items()
     )
     return f'<div class="sb-title">Your {plan} split</div><div class="sb-split">{rows}</div>'
@@ -199,10 +210,8 @@ def watched_meters(user_budget, key):
     """Every limit and target an alert watches, by the name the alert shows."""
     month = budget.get_month(user_budget, key)
     limits = user_budget["settings"]["limits"]
-    spent = {limit_key: budget.section_total(month, limit_key) for limit_key in budget.LIMIT_KEYS}
-    spent["overall"] = budget.total_expenses(user_budget, month)
-    labels = limit_labels(user_budget)
-    meters = {labels[limit_key]: budget.meter(spent[limit_key], limits[limit_key]) for limit_key in budget.LIMIT_KEYS}
+    spent = limit_spent(user_budget, month)
+    meters = {LIMIT_LABELS[key]: budget.meter(spent[key], limits.get(key, 0)) for key in budget.LIMIT_KEYS}
     targets = budget.target_meters(user_budget, user_budget["settings"].get("targets", {}), month)
     # Only needs and wants are limits; investing and savings are minimums, so they never alert.
     meters.update({
@@ -221,12 +230,6 @@ def budget_alerts(before, after, key):
 
 
 # ---------- Event handlers: lines ----------
-
-def make_toggle(section):
-    def toggle(open_section):
-        return None if open_section == ("add", section) else ("add", section)
-    return toggle
-
 
 def make_open(value):
     return lambda: value
@@ -258,18 +261,17 @@ def make_remove(section, index):
 
 # ---------- Event handlers: subcategories ----------
 
-def make_rename(key, current):
-    def rename(user, user_budget, name):
-        if " ".join((name or "").split()) == current:
-            return gr.skip()
-        return changed(user, user_budget, budget.rename_subcategory, key, name)
-    return rename
+def make_confirm(keys):
+    """Save every staged rename and move at once and close the pop-up. One bad name saves nothing."""
+    def confirm(user, user_budget, *values):
+        names, categories = values[:len(keys)], values[len(keys):]
 
-
-def make_move(key):
-    def move(user, user_budget, category):
-        return changed(user, user_budget, budget.move_subcategory, key, category)
-    return move
+        def apply(updated):
+            for key, name, category in zip(keys, names, categories):
+                budget.rename_subcategory(updated, key, name)
+                budget.move_subcategory(updated, key, category)
+        return changed(user, user_budget, apply), False
+    return confirm
 
 
 def make_remove_subcategory(key):
@@ -279,7 +281,7 @@ def make_remove_subcategory(key):
 
 
 def add_subcategory(user, user_budget, name, category):
-    return changed(user, user_budget, budget.add_subcategory, name, category), ""
+    return changed(user, user_budget, budget.add_subcategory, name, category)
 
 
 # ---------- Event handlers: goals ----------
@@ -302,22 +304,16 @@ def parse_field(label, text):
         raise ValueError(f"{label}: {error}")
 
 
-def save_settings(user, user_budget, overall, necessities, discretionary, travel, goal):
+def save_settings(user, user_budget, overall, needs, wants, goal):
     def apply(updated):
-        labels = limit_labels(updated)
-        for key, text in zip(budget.LIMIT_KEYS, (overall, necessities, discretionary, travel)):
-            updated["settings"]["limits"][key] = parse_field(labels[key], text)
+        # A fresh dict, so limits from before they followed the categories don't linger.
+        updated["settings"]["limits"] = {
+            key: parse_field(LIMIT_LABELS[key], text) for key, text in zip(budget.LIMIT_KEYS, (overall, needs, wants))
+        }
         updated["settings"]["savings_goal"] = parse_field("Savings goal", goal)
     updated = changed(user, user_budget, apply)
     gr.Info("Limits and goal saved", title="Saved")
     return updated
-
-
-def limit_box_labels(user_budget):
-    """The limit boxes follow renamed subcategories."""
-    if not user_budget:
-        return [gr.skip()] * len(budget.LIMIT_KEYS)
-    return [gr.update(label=label) for label in limit_labels(user_budget).values()]
 
 
 def save_targets(user, user_budget, needs, wants, investing, savings):
@@ -332,8 +328,8 @@ def save_targets(user, user_budget, needs, wants, investing, savings):
     return updated, *target_texts(targets), None
 
 
-def use_50_30_20(user, user_budget):
-    return save_targets(user, user_budget, *(str(percent) for percent in budget.RULE_50_30_20.values()))
+def use_45_30_20_5(user, user_budget):
+    return save_targets(user, user_budget, *(str(percent) for percent in budget.RULE_45_30_20_5.values()))
 
 
 def make_complete(edited):
@@ -393,7 +389,7 @@ def sign_in(name_text, password):
     return (
         key, user_budget, budget.month_key(), None,
         gr.update(visible=False), gr.update(visible=True), gr.Tabs(selected="budget", visible=True),
-        *[dollars_text(settings["limits"][limit]) for limit in budget.LIMIT_KEYS],
+        *[dollars_text(settings["limits"].get(limit, 0)) for limit in budget.LIMIT_KEYS],
         dollars_text(settings["savings_goal"]),
         *target_texts(settings.get("targets", {})),
         "",
@@ -465,6 +461,7 @@ with gr.Blocks(title="Sliced Bread") as demo:
     open_state = gr.State(None)  # ("add", section) or ("edit", section, index): the one open form
     auto_target_state = gr.State(None)  # the target box filled in to make 100, until the user types in it
     menu_state = gr.State(False)  # whether the avatar's menu is open
+    subs_open_state = gr.State(False)  # whether the subcategory pop-up is open
 
     # Sign in: a new name makes a new budget with that password
     with gr.Column(elem_classes="sb-card sb-auth") as auth_view:
@@ -520,16 +517,9 @@ with gr.Blocks(title="Sliced Bread") as demo:
                         with gr.Column(elem_classes="sb-card"):
                             with gr.Row(elem_classes="sb-row"):
                                 html(section_head_html(user_budget, month, section, section_name, category), elem_classes="sb-grow")
-                                plus = gr.Button(
-                                    "Close" if is_open else "+ Add", variant="secondary" if is_open else "primary",
-                                    elem_classes="sb-add-button", min_width=0, scale=0,
-                                )
-                                plus.click(make_toggle(section), inputs=open_state, outputs=open_state)
-
-                            limit = user_budget["settings"]["limits"].get(section, 0)
-                            meter = design.meter_html(budget.meter(budget.section_total(month, section), limit))
-                            if meter:
-                                html(meter)
+                                if not is_open:  # an open form closes with its own Done
+                                    plus = gr.Button("+ Add", variant="primary", elem_classes="sb-add-button", min_width=0, scale=0)
+                                    plus.click(make_open(("add", section)), outputs=open_state)
 
                             if is_open:
                                 with gr.Column(elem_classes="sb-panel"):
@@ -566,8 +556,8 @@ with gr.Blocks(title="Sliced Bread") as demo:
                                         with gr.Column(elem_classes="sb-panel"):
                                             edit_tier = tier_box(user_budget, item["tier"]) if tier else None
                                             with gr.Row(elem_classes="sb-row"):
-                                                edit_name = gr.Textbox(label="Name", value=item["name"], autofocus=True, scale=3, min_width=0)
-                                                edit_amount = gr.Textbox(label="Amount", value=dollars_text(item["amount"]), scale=2, min_width=0)
+                                                edit_name = gr.Textbox(label="Name", value=item["name"], autofocus=True, interactive=True, scale=3, min_width=0)
+                                                edit_amount = gr.Textbox(label="Amount", value=dollars_text(item["amount"]), interactive=True, scale=2, min_width=0)
                                             with gr.Row(elem_classes="sb-row"):
                                                 save_button = gr.Button("Save", variant="primary")
                                                 cancel_edit_button = gr.Button("Cancel")
@@ -612,44 +602,53 @@ with gr.Blocks(title="Sliced Bread") as demo:
                         target_investing = gr.Textbox(label="Investing %", placeholder="Off", min_width=0)
                         target_savings = gr.Textbox(label="Savings %", placeholder="Off", min_width=0)
                     with gr.Row():
-                        use_rule_button = gr.Button("Use 50/30/20")
+                        use_rule_button = gr.Button("Use 45/30/20/5")
                         save_targets_button = gr.Button("Save targets", variant="primary")
-
-                with gr.Column(elem_classes="sb-card"):
-                    html('<div class="sb-title">Subcategories</div>')
-
-                    @gr.render(inputs=budget_state, triggers=[budget_state.change])
-                    def render_subcategories(user_budget):
-                        if not user_budget:
-                            return
-                        for category in budget.CATEGORIES:
-                            html(f'<div class="sb-group-head">{design.marker(category)}</div>')
-                            for sub in budget.subcategories_in(user_budget, category):
-                                with gr.Row(elem_classes="sb-row sb-sub-row"):
-                                    name_box = gr.Textbox(value=sub["name"], show_label=False, interactive=True, max_lines=1, scale=1, min_width=0)
-                                    move_box = gr.Dropdown(CATEGORY_OPTIONS, value=category, show_label=False, interactive=True, scale=0, min_width=CATEGORY_PICKER_WIDTH)
-                                    if sub["key"] not in budget.PRESET_KEYS:
-                                        remove_button = gr.Button("✕", elem_classes="sb-icon", min_width=0, scale=0)
-                                        remove_button.click(make_remove_subcategory(sub["key"]), inputs=[user_state, budget_state], outputs=budget_state)
-                                for trigger in (name_box.submit, name_box.blur):
-                                    trigger(make_rename(sub["key"], sub["name"]), inputs=[user_state, budget_state, name_box], outputs=budget_state)
-                                move_box.change(make_move(sub["key"]), inputs=[user_state, budget_state, move_box], outputs=budget_state)
-
-                    with gr.Row(elem_classes="sb-row sb-add-sub"):
-                        new_sub_name = gr.Textbox(label="New subcategory", placeholder="Pets", max_lines=1, scale=1, min_width=0)
-                        new_sub_category = gr.Dropdown(CATEGORY_OPTIONS, value="wants", label="Counts toward", scale=0, min_width=CATEGORY_PICKER_WIDTH)
-                    add_sub_button = gr.Button("Add subcategory", variant="primary")
+                    edit_subs_button = gr.Button("Edit subcategories")
 
                 with gr.Column(elem_classes="sb-card"):
                     html('<div class="sb-title">Monthly limits</div><div class="sb-note">Leave blank for no limit.</div>')
+                    limit_overall = gr.Textbox(label=LIMIT_LABELS["overall"], placeholder="No limit", min_width=120)
                     with gr.Row():
-                        limit_overall = gr.Textbox(label=OVERALL_LIMIT_LABEL, placeholder="No limit", min_width=120)
-                        limit_necessities = gr.Textbox(label="Necessities", placeholder="No limit", min_width=120)
-                    with gr.Row():
-                        limit_discretionary = gr.Textbox(label="Discretionary", placeholder="No limit", min_width=120)
-                        limit_travel = gr.Textbox(label="Travel", placeholder="No limit", min_width=120)
+                        limit_needs = gr.Textbox(label="Needs", placeholder="No limit", min_width=120)
+                        limit_wants = gr.Textbox(label="Wants", placeholder="No limit", min_width=120)
                     savings_goal = gr.Textbox(label="Savings goal", placeholder="No goal")
                     save_limits_button = gr.Button("Save limits and goal", variant="primary")
+
+        # The subcategory editor: a pop-up over the page from Goals' "Edit subcategories". Renames and moves wait for
+        # Confirm; ✕ and Add subcategory save straight away.
+        with gr.Column(visible=False, elem_classes="sb-modal") as subs_modal:
+            with gr.Column(elem_classes="sb-card sb-modal-card"):
+                html('<div class="sb-title">Subcategories</div>')
+
+                @gr.render(inputs=[budget_state, subs_open_state], triggers=[budget_state.change, subs_open_state.change])
+                def render_subcategories(user_budget, subs_open):
+                    if not (user_budget and subs_open):
+                        return
+                    keys, name_boxes, move_boxes = [], [], []
+                    for category in budget.CATEGORIES:
+                        html(f'<div class="sb-group-head">{design.marker(category)}</div>')
+                        for sub in budget.subcategories_in(user_budget, category):
+                            with gr.Row(elem_classes="sb-row sb-sub-row"):
+                                name_boxes.append(gr.Textbox(value=sub["name"], show_label=False, interactive=True, max_lines=1, scale=1, min_width=0))
+                                move_boxes.append(gr.Dropdown(CATEGORY_OPTIONS, value=category, show_label=False, interactive=True, scale=0, min_width=CATEGORY_PICKER_WIDTH))
+                                if sub["key"] not in budget.PRESET_KEYS:
+                                    remove_button = gr.Button("✕", elem_classes="sb-icon", min_width=0, scale=0)
+                                    remove_button.click(make_remove_subcategory(sub["key"]), inputs=[user_state, budget_state], outputs=budget_state)
+                            keys.append(sub["key"])
+
+                    with gr.Row(elem_classes="sb-row sb-add-sub"):
+                        new_sub_name = gr.Textbox(label="New subcategory", placeholder="Pets", interactive=True, max_lines=1, scale=1, min_width=0)
+                        new_sub_category = gr.Dropdown(CATEGORY_OPTIONS, value="wants", label="Counts toward", interactive=True, scale=0, min_width=CATEGORY_PICKER_WIDTH)
+                    add_sub_button = gr.Button("Add subcategory")
+                    for trigger in (add_sub_button.click, new_sub_name.submit):
+                        trigger(add_subcategory, inputs=[user_state, budget_state, new_sub_name, new_sub_category], outputs=budget_state)
+
+                    with gr.Row(elem_classes="sb-row"):
+                        confirm_button = gr.Button("Confirm", variant="primary")
+                        cancel_subs_button = gr.Button("Cancel")
+                    confirm_button.click(make_confirm(keys), inputs=[user_state, budget_state, *name_boxes, *move_boxes], outputs=[budget_state, subs_open_state])
+                    cancel_subs_button.click(lambda: False, outputs=subs_open_state)
 
         # Opened from the avatar menu's "Edit profile" in place of the tabs. Not a tab: Gradio 6.31 folds a fourth tab
         # into a "more" menu even when it fits.
@@ -678,7 +677,7 @@ with gr.Blocks(title="Sliced Bread") as demo:
 
     # ---------- Wiring ----------
 
-    limit_boxes = [limit_overall, limit_necessities, limit_discretionary, limit_travel]
+    limit_boxes = [limit_overall, limit_needs, limit_wants]
     target_boxes = [target_needs, target_wants, target_investing, target_savings]
     session_outputs = [user_state, budget_state, month_state, open_state, auth_view, app_view]
     signed_in_outputs = session_outputs + [app_tabs, *limit_boxes, savings_goal, *target_boxes, login_password]
@@ -687,9 +686,8 @@ with gr.Blocks(title="Sliced Bread") as demo:
     for trigger in (login_button.click, login_username.submit, login_password.submit):
         trigger(sign_in, inputs=[login_username, login_password], outputs=signed_in_outputs)
 
-    # The header and limit labels follow the budget: a new name, a renamed subcategory.
+    # The header follows the budget's name.
     budget_state.change(lambda user_budget: (person_html(user_budget), initial(user_budget)), inputs=budget_state, outputs=[person_name, avatar_button])
-    budget_state.change(limit_box_labels, inputs=budget_state, outputs=limit_boxes)
 
     month_state.change(month_title_html, inputs=month_state, outputs=month_title)
     demo.load(month_title_html, inputs=month_state, outputs=month_title)
@@ -705,9 +703,9 @@ with gr.Blocks(title="Sliced Bread") as demo:
             trigger_mode="always_last", show_progress="hidden",
         )
     save_targets_button.click(save_targets, inputs=[user_state, budget_state, *target_boxes], outputs=[budget_state, *target_boxes, auto_target_state])
-    use_rule_button.click(use_50_30_20, inputs=[user_state, budget_state], outputs=[budget_state, *target_boxes, auto_target_state])
-    for trigger in (add_sub_button.click, new_sub_name.submit):
-        trigger(add_subcategory, inputs=[user_state, budget_state, new_sub_name, new_sub_category], outputs=[budget_state, new_sub_name])
+    use_rule_button.click(use_45_30_20_5, inputs=[user_state, budget_state], outputs=[budget_state, *target_boxes, auto_target_state])
+    edit_subs_button.click(lambda: True, outputs=subs_open_state)
+    subs_open_state.change(lambda subs_open: gr.update(visible=subs_open), inputs=subs_open_state, outputs=subs_modal)
     save_limits_button.click(save_settings, inputs=[user_state, budget_state, *limit_boxes, savings_goal], outputs=budget_state)
 
     history_outputs = [history_tiles, history_chart, history_items, items_card, sample_card]

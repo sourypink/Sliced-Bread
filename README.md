@@ -4,11 +4,11 @@
 
 A personal budget tracker in Python and Gradio. Add your income and spending; it tells you how much is
 left to save each month, warns you near and over your limits, checks your split against targets like
-50/30/20, and tracks a savings goal.
+45/30/20/5, and tracks a savings goal.
 
 Money goes into four fixed **categories** (Needs, Wants, Investing, Savings). Each category holds
-**subcategories**: Necessities, Discretionary, Travel and Investments to start, plus any you add on the Goals
-tab and place in one of the four. Each subcategory holds **items**, like Rent. A small marker on every card
+**subcategories**: Necessities, Discretionary, Travel, Investments and Emergency fund to start, plus any you add on
+the Goals tab and place in one of the four. Each subcategory holds **items**, like Rent. A small marker on every card
 shows which category it counts toward.
 
 ## Run it in Google Colab

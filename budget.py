@@ -14,15 +14,16 @@ PRESET_SUBCATEGORIES = (
     {"key": "discretionary", "name": "Discretionary", "category": "wants"},
     {"key": "travel", "name": "Travel", "category": "wants"},
     {"key": "investments", "name": "Investments", "category": "investing"},
+    {"key": "emergency_fund", "name": "Emergency fund", "category": "savings"},
 )
 PRESET_KEYS = tuple(preset["key"] for preset in PRESET_SUBCATEGORIES)
 MAX_CUSTOM_SUBCATEGORIES = 8
 ALL_SPENDING = "All spending"  # History's unzoomed view
-LIMIT_KEYS = ("overall", "necessities", "discretionary", "travel")  # custom subcategories have no limit
+LIMIT_KEYS = ("overall",) + SPENDING_CATEGORIES  # a cap on all spending, then one per spending category
 TIERED_SECTION = "investments"  # its lines belong to a tier the user names, like "Retirement"
 UNSAFE_KEY_CHARACTERS = re.compile(r"[^a-z0-9]+")
 
-RULE_50_30_20 = {"needs": 50, "wants": 30, "investing": 10, "savings": 10}  # the 20 split between the two
+RULE_45_30_20_5 = {"needs": 45, "wants": 30, "investing": 20, "savings": 5}
 PERCENT_WHOLE = 100
 
 WARN_AT = 0.9  # share of a limit at which the meter turns to "near limit"
@@ -106,14 +107,23 @@ def format_money(cents):
 
 # ---------- Subcategories ----------
 
+def missing_presets(subs):
+    """Presets a saved list lacks: budgets saved before subcategories, or before a preset was added."""
+    keys = {sub["key"] for sub in subs}
+    return [dict(preset) for preset in PRESET_SUBCATEGORIES if preset["key"] not in keys]
+
+
 def subcategories(budget):
-    """Every subcategory in page order within its category. Budgets saved before subcategories get the presets."""
-    return budget["settings"].get("subcategories") or [dict(preset) for preset in PRESET_SUBCATEGORIES]
+    """Every subcategory in page order within its category."""
+    stored = budget["settings"].get("subcategories", [])
+    return stored + missing_presets(stored)
 
 
 def editable_subcategories(budget):
-    """The stored list to change, written out from the presets the first time."""
-    return budget["settings"].setdefault("subcategories", subcategories(budget))
+    """The stored list to change, with any missing presets written in."""
+    subs = budget["settings"].setdefault("subcategories", [])
+    subs.extend(missing_presets(subs))
+    return subs
 
 
 def subcategories_in(budget, category):

@@ -175,11 +175,11 @@ def test_parse_targets_rejects(typed, message):
 def test_target_meters_compare_spending_to_share_of_income():
     # Income $3,200; needs $1,580.50; wants $340; nothing invested; saved $1,279.50.
     user_budget = make_budget()
-    meters = budget.target_meters(user_budget, budget.RULE_50_30_20, budget.get_month(user_budget, "2026-10"))
-    assert meters["needs"]["actual_percent"] == 49 and meters["needs"]["state"] == "warn"
-    assert meters["needs"]["label"] == "Near limit, $19.50 left"
-    assert meters["wants"]["actual_percent"] == 11 and meters["wants"]["state"] == "good"
-    assert meters["investing"]["actual_percent"] == 0 and meters["investing"]["label"] == "$320 short"
+    meters = budget.target_meters(user_budget, budget.RULE_45_30_20_5, budget.get_month(user_budget, "2026-10"))
+    assert meters["needs"]["actual_percent"] == 49 and meters["needs"]["state"] == "over"
+    assert meters["needs"]["label"] == "Over by $140.50"
+    assert meters["wants"]["actual_percent"] == 11 and meters["wants"]["label"] == "$620 left"
+    assert meters["investing"]["actual_percent"] == 0 and meters["investing"]["label"] == "$640 short"
     assert meters["savings"]["actual_percent"] == 40 and meters["savings"]["label"] == "On target"
 
 
@@ -189,18 +189,18 @@ def test_target_meters_flag_overspending_and_short_minimums():
     budget.add_item(user_budget, "2026-10", "necessities", "Rent", "600")
     budget.add_item(user_budget, "2026-10", "travel", "Trip", "300")
     budget.add_item(user_budget, "2026-10", "investments", "Roth IRA", "60", "Retirement")
-    meters = budget.target_meters(user_budget, budget.RULE_50_30_20, budget.get_month(user_budget, "2026-10"))
-    assert meters["needs"]["label"] == "Over by $100"
+    meters = budget.target_meters(user_budget, budget.RULE_45_30_20_5, budget.get_month(user_budget, "2026-10"))
+    assert meters["needs"]["label"] == "Over by $150"
     assert meters["wants"]["state"] == "warn"
-    assert meters["investing"]["state"] == "warn" and meters["investing"]["label"] == "$40 short"
-    assert meters["savings"]["state"] == "warn" and meters["savings"]["label"] == "$60 short"
+    assert meters["investing"]["state"] == "warn" and meters["investing"]["label"] == "$140 short"
+    assert meters["savings"]["state"] == "warn" and meters["savings"]["label"] == "$10 short"
 
 
 def test_target_meters_empty_without_targets_or_income():
     user_budget = make_budget()
     month = budget.get_month(user_budget, "2026-10")
     assert budget.target_meters(user_budget, {}, month) == {}
-    assert budget.target_meters(user_budget, budget.RULE_50_30_20, budget.get_month(user_budget, "2030-01")) == {}
+    assert budget.target_meters(user_budget, budget.RULE_45_30_20_5, budget.get_month(user_budget, "2030-01")) == {}
 
 
 def test_targets_saved_with_three_shares_count_as_off():
@@ -267,7 +267,18 @@ def test_new_budgets_start_with_the_presets_in_their_categories():
     subs = budget.subcategories(budget.empty_budget())
     assert [(sub["key"], sub["category"]) for sub in subs] == [
         ("necessities", "needs"), ("discretionary", "wants"), ("travel", "wants"), ("investments", "investing"),
+        ("emergency_fund", "savings"),
     ]
+
+
+def test_budgets_saved_before_a_new_preset_get_it():
+    user_budget = make_budget()
+    pets = budget.add_subcategory(user_budget, "Pets", "wants")
+    stored = user_budget["settings"]["subcategories"]
+    stored.remove(next(sub for sub in stored if sub["key"] == "emergency_fund"))
+    assert [sub["key"] for sub in budget.subcategories(user_budget)][-2:] == ["pets", "emergency_fund"]
+    budget.rename_subcategory(user_budget, "emergency_fund", "Rainy day")
+    assert stored[-1] == {"key": "emergency_fund", "name": "Rainy day", "category": "savings"} and pets in stored
 
 
 def test_added_subcategory_counts_toward_its_category():
@@ -339,13 +350,12 @@ def test_remove_refuses_presets_and_subcategories_with_items():
 
 def test_savings_subcategory_is_set_aside_not_left_over():
     user_budget = make_budget()
-    budget.add_subcategory(user_budget, "Emergency fund", "savings")
     budget.add_item(user_budget, "2026-10", "emergency_fund", "Transfer", "300")
     month = budget.get_month(user_budget, "2026-10")
     assert budget.leftover(user_budget, month) == 127950 - 30000
     assert budget.saved(user_budget, month) == 127950
     assert budget.savings_progress(user_budget) == 127950
-    meters = budget.target_meters(user_budget, budget.RULE_50_30_20, month)
+    meters = budget.target_meters(user_budget, budget.RULE_45_30_20_5, month)
     assert meters["savings"]["actual_percent"] == 40
 
 
@@ -371,7 +381,8 @@ def test_month_history_is_oldest_first_with_empty_months_as_zeros():
     assert rows[0]["income"] == 0 and rows[0]["spent"] == 0 and rows[0]["left"] == 0
     october = rows[1]
     assert october["income"] == 320000 and october["spent"] == 192050 and october["left"] == 127950
-    assert october["subcategories"] == {"necessities": 158050, "discretionary": 4000, "travel": 30000, "investments": 0}
+    assert october["subcategories"] == {"necessities": 158050, "discretionary": 4000, "travel": 30000, "investments": 0,
+                                     "emergency_fund": 0}
     assert october["categories"] == {"needs": 158050, "wants": 34000, "investing": 0, "savings": 0}
     assert october["invested"] == 0 and october["saved"] == 127950
 
@@ -429,7 +440,6 @@ def test_zoom_series_ranks_by_range_total_and_groups_the_rest():
 
 def test_chart_views_drill_from_categories_to_subcategories_to_items():
     user_budget = make_budget()
-    budget.add_subcategory(user_budget, "Emergency fund", "savings")
     budget.add_item(user_budget, "2026-10", "emergency_fund", "Transfer", "100")
     rows = budget.month_history(user_budget, "2026-10", 2)
     everything = charts.chart_view(user_budget, rows, "all")
@@ -546,3 +556,11 @@ def test_rename_budget_refuses_a_taken_name(tmp_path):
         storage.rename_budget("mark", "ana")
     storage.rename_budget("mark", "marcus")
     assert not (tmp_path / "mark.json").exists() and storage.load_budget("marcus") == make_budget()
+
+
+def test_limit_meters_redden_as_they_fill():
+    assert design.limit_color(0) == design.ACCENT
+    assert design.limit_color(budget.WARN_AT) == design.WARN
+    assert design.limit_color(1.0) == design.limit_color(1.5) == design.OVER
+    halfway = design.limit_color(0.5)
+    assert halfway not in (design.ACCENT, design.WARN, design.OVER)

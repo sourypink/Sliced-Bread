@@ -18,7 +18,7 @@ SOURCE_FILES = [
 INTRO = """# Sliced Bread: a personal budget tracker
 
 Add your income and spending; the app shows how much is left to invest each month, warns you near and over
-your limits, compares your split with targets like 50/30/20, and tracks a savings goal.
+your limits, compares your split with targets like 45/30/20/5, and tracks a savings goal.
 
 **To run it:** Runtime > Run all. The app opens at the bottom of this notebook, and a public `gradio.live`
 link is printed above it (best for the class demo). If a button shows an error, run the last cell and share

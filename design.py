@@ -38,6 +38,8 @@ DARKEST_MIX = 0.35  # share of black in the biggest line's shade
 LIGHTEST_MIX = 0.6  # share of white in the smallest; any lighter fades into the white card
 ITEM_LIGHTEST_MIX = 0.4  # same, from a subcategory's colour, which may already be up to 35% white
 METER_COLORS = {"good": ACCENT, "warn": WARN, "over": OVER}
+# A spending limit's fill blends through these as it fills: (share of the limit spent, colour). Red at the limit.
+LIMIT_COLOR_STOPS = ((0.0, ACCENT), (budget.WARN_AT, WARN), (1.0, OVER))
 
 # The mallard's own colours. Duck only; never used for UI.
 DUCK_HEAD = "#1D6B47"
@@ -242,6 +244,12 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
 
 /* Subcategories: a group per category under its marker; each row renames, moves or removes one. */
 .sb-group-head {{ margin-top: 8px; }}
+/* The subcategory pop-up: a dimmed backdrop over the whole page, the card centred and scrolling if tall. */
+.sb-modal {{
+  position: fixed !important; inset: 0; z-index: 1000; background: rgba(28, 27, 24, 0.45);
+  display: flex; align-items: center; justify-content: center; padding: 16px !important; overflow-y: auto;
+}}
+.sb-modal-card {{ width: 100%; max-width: {PAGE_MAX_WIDTH}; max-height: 100%; overflow-y: auto; flex: none !important; }}
 .sb-sub-row {{ gap: 8px !important; }}
 .sb-split-row {{ display: grid; gap: 8px; justify-items: start; }}
 .sb-split-row > .sb-meter-row {{ width: 100%; }}
@@ -524,14 +532,28 @@ def money(cents):
     return f'<span class="sb-money">{budget.format_money(cents)}</span>'
 
 
-def meter_html(result, label_left=""):
-    """A limit meter with its words. Empty string when no limit is set."""
+def limit_color(fraction):
+    """A spending limit's fill: green when empty, shifting through amber to red at the limit."""
+    fraction = min(max(fraction, 0.0), 1.0)
+    for (start, low), (end, high) in zip(LIMIT_COLOR_STOPS, LIMIT_COLOR_STOPS[1:]):
+        if fraction <= end:
+            share = (fraction - start) / (end - start)
+            channels = (
+                round(int(low[i:i + 2], 16) + (int(high[i:i + 2], 16) - int(low[i:i + 2], 16)) * share) for i in (1, 3, 5)
+            )
+            return "#" + "".join(f"{channel:02X}" for channel in channels)
+    return OVER
+
+
+def meter_html(result, label_left="", blend=False):
+    """A meter with its words; blend for spending limits, which redden as they fill. Empty when no limit is set."""
     if result["state"] == "none":
         return ""
     width = max(result["fraction"] * 100, 2)
+    color = limit_color(result["fraction"]) if blend else METER_COLORS[result["state"]]
     return (
         f'<div class="sb-meter-row"><div class="sb-meter"><span style="width:{width:.1f}%;'
-        f'background:{METER_COLORS[result["state"]]}"></span></div>'
+        f'background:{color}"></span></div>'
         f'<div class="sb-meter-label"><span>{html.escape(label_left)}</span><span>{html.escape(result["label"])}</span></div></div>'
     )
 
