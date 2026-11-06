@@ -19,11 +19,30 @@ PRESET_SUBCATEGORIES = (
 PRESET_KEYS = tuple(preset["key"] for preset in PRESET_SUBCATEGORIES)
 MAX_CUSTOM_SUBCATEGORIES = 8
 ALL_SPENDING = "All spending"  # History's unzoomed view
-LIMIT_KEYS = ("overall",) + SPENDING_CATEGORIES  # a cap on all spending, then one per spending category
 TIERED_SECTION = "investments"  # its lines belong to a tier the user names, like "Retirement"
 UNSAFE_KEY_CHARACTERS = re.compile(r"[^a-z0-9]+")
 
-RULE_45_30_20_5 = {"needs": 45, "wants": 30, "investing": 20, "savings": 5}
+# Starting plans the user can pick at sign-up or from Goals, each with the research behind it.
+PLAN_PRESETS = (
+    {
+        "key": "balanced", "name": "Balanced",
+        "targets": {"needs": 50, "wants": 30, "investing": 15, "savings": 5},
+        "why": "Half on must-haves, 15% for retirement, 5% for short-term savings.",
+        "source": "Warren & Tyagi, All Your Worth (2005): 50/30/20. Fidelity's 50/15/5 saving guideline.",
+    },
+    {
+        "key": "safety_net", "name": "Safety net first",
+        "targets": {"needs": 50, "wants": 20, "investing": 10, "savings": 20},
+        "why": "Build an emergency fund before investing hard.",
+        "source": "Vanguard (2025, 12,400 investors): $2,000+ in emergency savings, 21% higher financial well-being.",
+    },
+    {
+        "key": "invest_more", "name": "Invest more",
+        "targets": {"needs": 45, "wants": 20, "investing": 30, "savings": 5},
+        "why": "A higher saving rate reaches retirement sooner.",
+        "source": "Fidelity: save more than 15% to retire before 67. Bengen (1994), the 4% rule: aim for 25x yearly spending.",
+    },
+)
 PERCENT_WHOLE = 100
 
 WARN_AT = 0.9  # share of a limit at which the meter turns to "near limit"
@@ -33,9 +52,9 @@ CENTS_PER_DOLLAR = 100
 
 
 def empty_budget():
-    """A new user's budget: no limits, no goal, no months."""
+    """A new user's budget: no limit, no goal, no months."""
     return {
-        "settings": {"savings_goal": 0, "limits": {key: 0 for key in LIMIT_KEYS}, "targets": {}},
+        "settings": {"savings_goal": 0, "limits": {"overall": 0}, "targets": {}},
         "months": {},
     }
 
@@ -107,22 +126,22 @@ def format_money(cents):
 
 # ---------- Subcategories ----------
 
-def missing_presets(subs):
-    """Presets a saved list lacks: budgets saved before subcategories, or before a preset was added."""
-    keys = {sub["key"] for sub in subs}
+def missing_presets(budget, subs):
+    """Presets a saved list lacks (saved before subcategories, or before a preset was added), unless removed."""
+    keys = {sub["key"] for sub in subs} | set(budget["settings"].get("removed_presets", []))
     return [dict(preset) for preset in PRESET_SUBCATEGORIES if preset["key"] not in keys]
 
 
 def subcategories(budget):
     """Every subcategory in page order within its category."""
     stored = budget["settings"].get("subcategories", [])
-    return stored + missing_presets(stored)
+    return stored + missing_presets(budget, stored)
 
 
 def editable_subcategories(budget):
     """The stored list to change, with any missing presets written in."""
     subs = budget["settings"].setdefault("subcategories", [])
-    subs.extend(missing_presets(subs))
+    subs.extend(missing_presets(budget, subs))
     return subs
 
 
@@ -191,15 +210,15 @@ def move_subcategory(budget, key, category):
 
 
 def remove_subcategory(budget, key):
-    """Delete one of the user's own subcategories. Refused while any month has lines in it, so nothing is lost."""
+    """Delete a subcategory, preset or not. Refused while any month has lines in it, so nothing is lost."""
     sub = find_subcategory(budget, key)
-    if key in PRESET_KEYS:
-        raise ValueError(f"{sub['name']} is built in and can't be removed")
     used = sum(1 for month in budget["months"].values() if month.get(key))
     if used:
         plural = "s" if used > 1 else ""
         raise ValueError(f"{sub['name']} has items in {used} month{plural}. Delete them first.")
     editable_subcategories(budget).remove(sub)
+    if key in PRESET_KEYS:  # so it isn't added back as "missing"
+        budget["settings"].setdefault("removed_presets", []).append(key)
     for month in budget["months"].values():
         month.pop(key, None)
 
@@ -307,7 +326,7 @@ def tiers(budget):
     """Every investment tier used in any month, in the order they were first used."""
     seen = {}
     for key in sorted(budget["months"]):
-        for item in get_month(budget, key)[TIERED_SECTION]:
+        for item in get_month(budget, key).get(TIERED_SECTION, []):
             seen.setdefault(item["tier"], None)
     return list(seen)
 
@@ -363,6 +382,30 @@ def complete_targets(texts, auto_key, edited_key):
         auto_key = blanks[0]
     values[auto_key] = remainder(auto_key)
     return [values[key] for key in CATEGORIES], auto_key
+
+
+def share_of(cents, percent):
+    """percent of an amount, rounded down to the cent."""
+    return cents * percent // PERCENT_WHOLE
+
+
+def plan_amounts(limit_text, percent_texts):
+    """While typing on Goals: each category's dollars for every valid %. Empty until a limit is typed."""
+    try:
+        limit = parse_optional_amount(limit_text)
+    except ValueError:
+        return {}
+    percents = {category: target_number(text) for category, text in zip(CATEGORIES, percent_texts)}
+    return {category: share_of(limit, percent) for category, percent in percents.items() if limit and percent is not None}
+
+
+def category_limits(settings):
+    """Each category's dollar share of the monthly limit by its target %. Empty unless both are set."""
+    overall = settings["limits"].get("overall", 0)
+    targets = settings.get("targets", {})
+    if overall <= 0 or set(targets) != set(CATEGORIES):
+        return {}
+    return {category: share_of(overall, targets[category]) for category in CATEGORIES}
 
 
 def minimum_meter(reached, goal):
@@ -519,6 +562,8 @@ def fill_sample_months(budget, current_key):
         if any(get_month(budget, key).values()):
             continue
         for section, name, dollars, *tier in lines:
+            if section not in section_keys(budget):  # a preset the user removed
+                continue
             add_item(budget, key, section, name + SAMPLE_TAG, str(dollars), *tier)
         filled += 1
     return filled
