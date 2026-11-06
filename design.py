@@ -277,12 +277,16 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
 
 /* Subcategories: a group per category under its marker; each row renames, moves or removes one. */
 .sb-group-head {{ margin-top: 8px; }}
-/* The subcategory pop-up: a dimmed backdrop over the whole page, the card centred and scrolling if tall. */
+/* Pop-ups: a dimmed backdrop over the whole page, the card centred, rounded, and scrolling if tall with no bar showing. */
 .sb-modal {{
   position: fixed !important; inset: 0; z-index: 1000; background: rgba(28, 27, 24, 0.45);
-  display: flex; align-items: center; justify-content: center; padding: 16px !important; overflow-y: auto;
+  display: flex; align-items: center; justify-content: center; padding: 16px !important;
 }}
-.sb-modal-card {{ width: 100%; max-width: {PAGE_MAX_WIDTH}; max-height: 100%; overflow-y: auto; flex: none !important; }}
+.sb-modal .sb-modal-card {{
+  width: 100%; max-width: {PAGE_MAX_WIDTH}; max-height: 100%; overflow-y: auto; flex: none !important;
+  border-radius: 20px !important; scrollbar-width: none;
+}}
+.sb-modal-card::-webkit-scrollbar {{ display: none; }}
 .sb-sub-row {{ gap: 8px !important; }}
 .sb-preset-tag {{ font-size: 14px; color: var(--sb-muted); margin-top: -4px; }}
 /* The plan chooser: each preset's shares, why, and the research behind it. */
@@ -330,13 +334,6 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
 .sb-item {{ border-top: 1px solid var(--sb-line); padding-top: 10px; }}
 .sb-line {{ display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 16px; }}
 .sb-line-name {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
-
-/* An investment tier's heading inside the Investments card: name and subtotal. */
-.sb-tier {{
-  display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; padding: 6px 12px; border-radius: 10px;
-  background: var(--sb-paper); font-size: 14px; font-weight: 600;
-}}
-.sb-tier-box input {{ font-size: 16px !important; }}
 
 /* Meters: thin, colour in the fill, words underneath. */
 .sb-meter {{ height: 6px; background: var(--sb-line); border-radius: 999px; overflow: hidden; }}

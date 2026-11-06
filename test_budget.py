@@ -95,7 +95,7 @@ def test_remove_item():
 def test_add_item_rejects_unknown_section_and_bad_amount_without_changing_anything():
     user_budget = budget.empty_budget()
     with pytest.raises(ValueError):
-        budget.add_item(user_budget, "2026-10", "investments", "Stocks", "10")  # no tier
+        budget.add_item(user_budget, "2026-10", "nowhere", "Stocks", "10")
     with pytest.raises(ValueError):
         budget.add_item(user_budget, "2026-10", "income", "Job", "lots")
     assert user_budget["months"] == {}
@@ -190,7 +190,7 @@ def test_target_meters_flag_overspending_and_short_minimums():
     budget.add_item(user_budget, "2026-10", "income", "Job", "1000")
     budget.add_item(user_budget, "2026-10", "necessities", "Rent", "600")
     budget.add_item(user_budget, "2026-10", "travel", "Trip", "300")
-    budget.add_item(user_budget, "2026-10", "investments", "Roth IRA", "60", "Retirement")
+    budget.add_item(user_budget, "2026-10", "investments", "Roth IRA", "60")
     meters = budget.target_meters(user_budget, TARGETS_45_30_20_5, budget.get_month(user_budget, "2026-10"))
     assert meters["needs"]["label"] == "Over by $150"
     assert meters["wants"]["state"] == "warn"
@@ -215,43 +215,16 @@ def test_targets_saved_with_three_shares_count_as_off():
 
 def test_investing_comes_out_before_savings():
     user_budget = make_budget()
-    budget.add_item(user_budget, "2026-10", "investments", "Roth IRA", "500", "Retirement")
+    budget.add_item(user_budget, "2026-10", "investments", "Roth IRA", "500")
     month = budget.get_month(user_budget, "2026-10")
     assert budget.total_invested(user_budget, month) == 50000
     assert budget.total_expenses(user_budget, month) == 192050  # spending only, so limits ignore investing
     assert budget.leftover(user_budget, month) == 320000 - 192050 - 50000
 
 
-def test_investment_lines_need_a_tier_and_other_lines_ignore_it():
+def test_investment_lines_are_plain_lines():
     user_budget = budget.empty_budget()
-    with pytest.raises(ValueError, match="Enter a tier"):
-        budget.add_item(user_budget, "2026-10", "investments", "Roth IRA", "100", "  ")
-    item = budget.add_item(user_budget, "2026-10", "investments", "Roth IRA", "100", "  Retirement   fund ")
-    assert item == {"name": "Roth IRA", "amount": 10000, "tier": "Retirement fund"}
-    assert budget.add_item(user_budget, "2026-10", "income", "Job", "100", "Ignored") == {"name": "Job", "amount": 10000}
-
-
-def test_update_item_can_move_an_investment_to_another_tier():
-    user_budget = budget.empty_budget()
-    budget.add_item(user_budget, "2026-10", "investments", "Index fund", "100", "Retirement")
-    budget.update_item(user_budget, "2026-10", "investments", 0, "Index fund", "150", "Brokerage")
-    assert budget.get_month(user_budget, "2026-10")["investments"][0] == {"name": "Index fund", "amount": 15000, "tier": "Brokerage"}
-
-
-def test_typing_a_tier_in_other_capitals_reuses_it():
-    user_budget = budget.empty_budget()
-    budget.add_item(user_budget, "2026-10", "investments", "Roth IRA", "100", "Retirement")
-    assert budget.add_item(user_budget, "2026-11", "investments", "401k", "100", "retirement")["tier"] == "Retirement"
-    assert budget.tiers(user_budget) == ["Retirement"]
-
-
-def test_tiers_in_first_used_order():
-    user_budget = budget.empty_budget()
-    budget.add_item(user_budget, "2026-11", "investments", "Crypto", "50", "Fun money")
-    budget.add_item(user_budget, "2026-10", "investments", "Roth IRA", "100", "Retirement")
-    budget.add_item(user_budget, "2026-10", "investments", "Index fund", "100", "Brokerage")
-    budget.add_item(user_budget, "2026-11", "investments", "Roth IRA", "100", "Retirement")
-    assert budget.tiers(user_budget) == ["Retirement", "Brokerage", "Fun money"]
+    assert budget.add_item(user_budget, "2026-10", "investments", "Roth IRA", "100") == {"name": "Roth IRA", "amount": 10000}
 
 
 def test_budgets_saved_before_investments_existed_still_work():
@@ -259,7 +232,7 @@ def test_budgets_saved_before_investments_existed_still_work():
     user_budget = {**budget.empty_budget(), "months": {"2026-10": old_month}}
     assert budget.get_month(user_budget, "2026-10")["investments"] == []
     assert budget.leftover(user_budget, budget.get_month(user_budget, "2026-10")) == 100000
-    budget.add_item(user_budget, "2026-10", "investments", "Roth IRA", "100", "Retirement")
+    budget.add_item(user_budget, "2026-10", "investments", "Roth IRA", "100")
     assert budget.total_invested(user_budget, budget.get_month(user_budget, "2026-10")) == 10000
 
 
@@ -358,13 +331,11 @@ def test_a_removed_preset_stays_removed():
     assert "emergency_fund" not in budget.section_keys(user_budget)
 
 
-def test_removing_investments_leaves_tiers_and_sample_months_working():
+def test_removing_investments_leaves_sample_months_working():
     user_budget = budget.empty_budget()
     budget.remove_subcategory(user_budget, "investments")
-    assert budget.tiers(user_budget) == []
     assert budget.fill_sample_months(user_budget, "2026-11") == 5
     assert budget.month_history(user_budget, "2026-10", 1)[0]["invested"] == 0
-    assert budget.tiers(user_budget) == []
 
 
 # ---------- budget.py: plan presets and the monthly limit ----------
@@ -473,9 +444,9 @@ def test_section_lines_merges_same_label_and_keeps_empty_months():
     user_budget = budget.empty_budget()
     budget.add_item(user_budget, "2026-09", "necessities", "Rent", "1000")
     budget.add_item(user_budget, "2026-09", "necessities", "Rent", "200")
-    budget.add_item(user_budget, "2026-09", "investments", "Index fund", "50", "Retirement")
+    budget.add_item(user_budget, "2026-09", "investments", "Index fund", "50")
     assert budget.section_lines(user_budget, ["2026-08", "2026-09"], "necessities") == {"2026-08": {}, "2026-09": {"Rent": 120000}}
-    assert budget.section_lines(user_budget, ["2026-09"], "investments") == {"2026-09": {"Retirement: Index fund": 5000}}
+    assert budget.section_lines(user_budget, ["2026-09"], "investments") == {"2026-09": {"Index fund": 5000}}
 
 
 def test_shades_run_darkest_to_lightest():
@@ -526,7 +497,6 @@ def test_fill_sample_months_only_fills_empty_earlier_months():
     assert all(item["name"].endswith(budget.SAMPLE_TAG) for item in budget.get_month(user_budget, "2026-06")["income"])
     assert budget.fill_sample_months(user_budget, "2026-11") == 0
     assert budget.months_with_data(user_budget) == 5
-    assert budget.tiers(user_budget) == ["Retirement", "Brokerage"]
     assert budget.month_history(user_budget, "2026-07", 1)[0]["invested"] == 40000
 
 

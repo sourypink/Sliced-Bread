@@ -14,7 +14,7 @@ Words, used the same way in code and on screen:
   start, plus up to 8 of the user's own. Each sits in exactly one category; from the Goals tab any of them can be
   renamed or moved, and the user's own can be removed once they hold no items. A small marker ("● Wants") on every card
   says which category it counts toward, and its dot is a shade of that category's colour.
-- **Item**: a line in a subcategory: Rent, Flights. Investments items also carry a tier you name (Retirement).
+- **Item**: a line in a subcategory: Rent, Flights.
 
 The page reads top to bottom, the way money flows: **Income**, then the subcategories grouped Needs → Wants →
 Investing → Savings, then the **Savings** card: what was set aside in Savings subcategories plus whatever is left.
@@ -32,7 +32,7 @@ Maps to the brief's feature list:
 | Automatic calculations | `budget.py`; every add or delete recomputes |
 | Budget alerts | Limit meters under the hero shift from green through amber to red as they fill: near limit at 90%, over at 100% |
 | Monthly summary | The hero line and a donut of where the money went at the top of the page; month picker |
-| Investing with tiers | Investments section: lines grouped under tiers you create by typing a name |
+| Investing | Investments section: plain lines like any subcategory, counted toward Investing |
 | Savings goal | Savings card: progress toward the goal set on the Goals tab |
 | History over months | History tab: earned vs money out per month by category (6 / 12 months / All); click a category to see its subcategories, then a subcategory to see its items in shades of its colour; biggest items, a table of every number, and sample months for demos |
 | Percentage targets (50/30/20) | Goals tab sets the four categories' % (typing three fills the fourth to make 100), or picks one of three cited presets, offered once at sign-up; a split card under the hero compares actual vs target and alerts on overspend |
@@ -107,7 +107,8 @@ hero says the same.
   savings are minimums. Typing three fills the fourth to make 100. A line under the boxes shows each % in dollars
   of the limit ("Needs $1,500 · Wants $900 ..."), and those are the Needs and Wants limits the hero's meters use.
   With targets off, the limit caps all spending.
-- **Choose a preset** opens "Pick a plan": the Monthly limit, then three presets, each with the research behind it.
+- **Choose a preset** opens "Pick a plan": three presets, each with the research behind it.
+  Picking one keeps the Monthly limit set on Goals.
   A new account sees it once after its first sign-in; "Set my own" closes it for good.
 
   | Preset | Needs/Wants/Investing/Savings | Basis |
