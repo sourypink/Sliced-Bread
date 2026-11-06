@@ -482,80 +482,82 @@ def temp_data_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(storage, "DATA_DIR", str(tmp_path))
 
 
-@pytest.mark.parametrize("typed, key", [("Mark", "mark"), (" Mark  G ", "mark_g"), ("../../etc/x", "etc_x"), ("Ana-María", "ana-mar_a")])
-def test_any_name_maps_to_a_safe_file_key(typed, key):
-    assert storage.file_key(typed) == key
-
-
-@pytest.mark.parametrize("typed, message", [("", "Enter your name"), ("   ", "Enter your name"), ("!!!", "letter or number"), ("x" * 31, "30 characters")])
+@pytest.mark.parametrize("typed, message", [("", "Enter your name"), ("   ", "Enter your name"), ("x" * 31, "30 characters")])
 def test_unusable_names_are_rejected(typed, message):
     with pytest.raises(ValueError, match=message):
-        storage.file_key(typed)
-
-
-def test_new_name_starts_with_an_empty_budget():
-    assert storage.load_budget("nobody") == budget.empty_budget()
+        storage.clean_name(typed)
 
 
 def test_budget_round_trips_through_a_file():
     user_budget = make_budget()
     user_budget["settings"]["savings_goal"] = 500000
-    storage.save_budget("mark", user_budget)
-    assert storage.load_budget("mark") == user_budget
-    assert storage.load_budget("someone_else") == budget.empty_budget()
+    storage.save_budget("mark@example.com", user_budget)
+    assert storage.load_budget("mark@example.com") == user_budget
+    assert not storage.account_exists("someone@example.com")
 
 
 def test_delete_budget(tmp_path):
-    storage.save_budget("mark", make_budget())
-    storage.delete_budget("mark")
-    assert not (tmp_path / "mark.json").exists()
-    storage.delete_budget("mark")  # deleting twice is fine
+    storage.save_budget("mark@example.com", make_budget())
+    storage.delete_budget("mark@example.com")
+    assert not (tmp_path / "mark@example.com.json").exists()
+    storage.delete_budget("mark@example.com")  # deleting twice is fine
 
 
-def test_first_sign_in_sets_the_password_and_later_ones_check_it():
-    key, user_budget = storage.sign_in(" Mark ", "correct horse")
-    assert key == "mark" and user_budget["account"]["name"] == "Mark"
+def test_create_account_then_log_in_with_its_email():
+    key, user_budget = storage.create_account(" Mark  G ", " Mark@Example.com ", "correct horse", "correct horse")
+    assert key == "mark@example.com"
+    assert user_budget["account"]["name"] == "Mark G" and user_budget["account"]["email"] == key
     assert "correct horse" not in str(user_budget["account"])
-    assert storage.sign_in("mark", "correct horse")[0] == "mark"
-    with pytest.raises(ValueError, match="don't match"):
-        storage.sign_in("Mark", "wrong password")
+    assert storage.log_in("MARK@example.com", "correct horse") == (key, user_budget)
 
 
-def test_budget_saved_before_passwords_takes_the_next_one_typed():
-    storage.save_budget("mark", make_budget())
-    key, user_budget = storage.sign_in("Mark", "new password")
-    assert budget.section_total(budget.get_month(user_budget, "2026-10"), "income") == 320000
-    assert storage.check_password(storage.load_budget(key)["account"], "new password")
+@pytest.mark.parametrize("email, password", [("mark@example.com", "wrong password"), ("nobody@example.com", "correct horse")])
+def test_log_in_refuses_a_wrong_password_or_unknown_email_alike(email, password):
+    storage.create_account("Mark", "mark@example.com", "correct horse", "correct horse")
+    with pytest.raises(ValueError, match="email and password don't match"):
+        storage.log_in(email, password)
 
 
-def test_short_passwords_are_refused():
-    with pytest.raises(ValueError, match="at least 8"):
-        storage.sign_in("Mark", "short")
-    assert storage.load_budget("mark") == budget.empty_budget()  # nothing saved
+def test_create_account_refuses_a_taken_email():
+    storage.create_account("Mark", "mark@example.com", "correct horse", "correct horse")
+    with pytest.raises(ValueError, match="already exists"):
+        storage.create_account("Someone else", "mark@example.com", "other password", "other password")
+
+
+@pytest.mark.parametrize("password, confirm, message", [("short", "short", "at least 8"), ("correct horse", "correct hose", "don't match")])
+def test_create_account_refuses_bad_passwords(password, confirm, message):
+    with pytest.raises(ValueError, match=message):
+        storage.create_account("Mark", "mark@example.com", password, confirm)
+    assert not storage.account_exists("mark@example.com")  # nothing saved
 
 
 def test_same_password_gets_a_different_salt():
     assert storage.hash_password("same one") != storage.hash_password("same one")
 
 
-@pytest.mark.parametrize("typed, email", [("", ""), ("  a@b.co ", "a@b.co")])
+@pytest.mark.parametrize("typed, email", [("  A@b.co ", "a@b.co"), ("first.last+tag@mail.example.org", "first.last+tag@mail.example.org")])
 def test_clean_email_accepts(typed, email):
     assert storage.clean_email(typed) == email
 
 
-@pytest.mark.parametrize("typed", ["nope", "a@b", "a b@c.d", "x" * 250 + "@b.co"])
+@pytest.mark.parametrize("typed", ["nope", "a@b", "a b@c.d", "../x@b.co", "a@b/c.co", "x" * 250 + "@b.co"])
 def test_clean_email_rejects(typed):
     with pytest.raises(ValueError, match="name@example.com"):
         storage.clean_email(typed)
 
 
-def test_rename_budget_refuses_a_taken_name(tmp_path):
-    storage.save_budget("mark", make_budget())
-    storage.save_budget("ana", budget.empty_budget())
-    with pytest.raises(ValueError, match="taken"):
-        storage.rename_budget("mark", "ana")
-    storage.rename_budget("mark", "marcus")
-    assert not (tmp_path / "mark.json").exists() and storage.load_budget("marcus") == make_budget()
+def test_clean_email_requires_one():
+    with pytest.raises(ValueError, match="Enter your email"):
+        storage.clean_email("  ")
+
+
+def test_rename_budget_refuses_a_taken_email(tmp_path):
+    storage.save_budget("mark@example.com", make_budget())
+    storage.save_budget("ana@example.com", budget.empty_budget())
+    with pytest.raises(ValueError, match="already uses that email"):
+        storage.rename_budget("mark@example.com", "ana@example.com")
+    storage.rename_budget("mark@example.com", "marcus@example.com")
+    assert not storage.account_exists("mark@example.com") and storage.load_budget("marcus@example.com") == make_budget()
 
 
 def test_limit_meters_redden_as_they_fill():
