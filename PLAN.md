@@ -37,25 +37,28 @@ Maps to the brief's feature list:
 | History over months | History tab: earned vs money out per month by category (6 / 12 months / All); click a category to see its subcategories, then a subcategory to see its items in shades of its colour; biggest items, a table of every number, and sample months for demos |
 | Percentage targets (50/30/20) | Goals tab sets the four categories' % (typing three fills the fourth to make 100), or picks one of three cited presets, offered once at sign-up; a split card under the hero compares actual vs target and alerts on overspend |
 | Own categories | Goals tab: add a subcategory and pick which of the four categories it counts toward; the presets can be removed too |
-| Accounts | Sign in with a name and password (salted hash); the avatar menu has Edit profile (name, email, password, delete my data) and Sign out |
+| Accounts | Create an account (name, email, password) and log in with email and password (salted hash); the avatar menu has Edit profile (name, email, password, delete my data) and Sign out |
 
 ## 2. Screens
 
 Three tabs after sign-in: **Budget** (landing), **History** and **Goals**, plus a **Profile** page opened from the
-avatar menu. Before sign-in, only the sign-in card.
+avatar menu. Before log-in, only the log-in card.
 
-### Sign in
+### Log in / Create account
 
 ```
-┌──────────────────────────────┐
-│ Sliced Bread                 │
-│ Know what's left each month  │
-│                              │
-│ Name     [            ]      │
-│ Password [ anything   ]      │
-│ [ Sign in ]                  │
-└──────────────────────────────┘
+┌──────────────────────────────┐   ┌──────────────────────────────┐
+│ Sliced Bread                 │   │ Create an account            │
+│ Log in                       │   │ Name           [          ]  │
+│ Email    [            ]      │   │ Email          [          ]  │
+│ Password [            ]      │   │ Password       [          ]  │
+│ [ Log in ]                   │   │ Password again [          ]  │
+│ New here? Create an account  │   │ [ Create account ]           │
+└──────────────────────────────┘   │ Have an account? Log in      │
+                                   └──────────────────────────────┘
 ```
+
+Accounts are local JSON files, not a real auth service: no email is ever sent.
 
 ### Budget (landing) — one centered column, 640 px max
 
@@ -122,7 +125,7 @@ hero says the same.
 
 ### Profile (avatar menu, then Edit profile)
 
-- Name (also the sign-in name) and email; change password (current, new, again); delete my data (asks to
+- Name and email (the log-in email; changing it moves the saved file); change password (current, new, again); delete my data (asks to
   confirm). Replaces the tabs until "← Back"; Sign out is in the same menu.
 
 ## 3. Code structure
@@ -133,7 +136,7 @@ Four modules, one owner each, so teammates rarely edit the same file.
 sliced-bread/
   app.py            Gradio UI: sign-in, Budget, History and Goals tabs, profile. Only file that imports gradio.
   budget.py         Pure logic: totals, leftover, meter state, savings progress, input validation
-  storage.py        Read/write one JSON budget per name, with a salted PBKDF2 password hash
+  storage.py        Read/write one JSON budget per account email, with a salted PBKDF2 password hash
   design.py         The design system in code: Gradio theme + one CSS string
   charts.py         History tab: column chart, tiles, table (plain HTML, no Gradio)
   test_budget.py    pytest for budget.py and storage.py
@@ -147,7 +150,7 @@ sliced-bread/
 
 ```json
 {
-  "account": {"name": "Mark", "email": "", "salt": "(hex)", "password_hash": "(hex)"},
+  "account": {"name": "Mark", "email": "mark@example.com", "salt": "(hex)", "password_hash": "(hex)"},
   "settings": {"savings_goal": 500000,
                "limits": {"overall": 300000},
                "targets": {"needs": 50, "wants": 30, "investing": 15, "savings": 5},
@@ -312,7 +315,7 @@ With 4 members, A takes D's work.
 
 ## Known limitations (to state in the presentation)
 
-- Passwords are hashed, but they live in the same JSON file as the budget, a new name creates a new budget, and
-  there is no rate limiting or password reset. Fine for a class demo, not for real money.
+- Passwords are hashed, but they live in the same JSON file as the budget, and there is no email verification,
+  rate limiting or password reset. Fine for a class demo, not for real money.
 - Colab data disappears on runtime reset unless Drive is mounted.
 - One currency (USD); no bank sync.

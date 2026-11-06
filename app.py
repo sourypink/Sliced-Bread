@@ -394,12 +394,8 @@ def fill_samples(user, user_budget):
 
 # ---------- Event handlers: account ----------
 
-def sign_in(name_text, password):
-    """A known name needs its password; a new name, or a budget saved before passwords, takes this one."""
-    try:
-        key, user_budget = storage.sign_in(name_text, password)
-    except ValueError as error:
-        raise fail(str(error))
+def signed_in(key, user_budget):
+    """Show the Budget tab for a freshly logged-in account, with Goals filled from its settings."""
     settings = user_budget["settings"]
     limit = dollars_text(settings["limits"].get("overall", 0))
     # Offered once: a new account picks a plan or sets its own, and either way it isn't asked again.
@@ -409,14 +405,33 @@ def sign_in(name_text, password):
         gr.update(visible=False), gr.update(visible=True), gr.Tabs(selected="budget", visible=True),
         limit, dollars_text(settings["savings_goal"]),
         *target_texts(settings.get("targets", {})),
-        "", gr.update(visible=ask_for_plan),
+        "", "", "", gr.update(visible=ask_for_plan),
     )
+
+
+def log_in(email_text, password):
+    try:
+        return signed_in(*storage.log_in(email_text, password))
+    except ValueError as error:
+        raise fail(str(error))
+
+
+def create_account(name_text, email_text, password, confirm):
+    try:
+        return signed_in(*storage.create_account(name_text, email_text, password, confirm))
+    except ValueError as error:
+        raise fail(str(error))
+
+
+def show_signup(showing):
+    """Swap the auth card between Log in and Create account."""
+    return gr.update(visible=not showing), gr.update(visible=showing)
 
 
 def sign_out():
     return (
         None, None, budget.month_key(), None, gr.update(visible=True), gr.update(visible=False),
-        "", False, gr.update(visible=False), gr.update(visible=False),
+        *show_signup(False), False, gr.update(visible=False), gr.update(visible=False),
     )
 
 
@@ -431,11 +446,10 @@ def open_profile(user_budget):
 
 
 def save_profile(user, user_budget, name_text, email_text):
-    """Change the sign-in name (moving the saved file) and the email."""
+    """Change the name and the log-in email; a new email moves the saved file."""
     try:
         name = storage.clean_name(name_text)
-        new_key = storage.file_key(name)
-        email = storage.clean_email(email_text)
+        email = new_key = storage.clean_email(email_text)
         if new_key != user:
             storage.rename_budget(user, new_key)
     except ValueError as error:
@@ -444,7 +458,7 @@ def save_profile(user, user_budget, name_text, email_text):
     updated["account"].update(name=name, email=email)
     storage.save_budget(new_key, updated)
     gr.Info("Profile saved", title="Saved")
-    return new_key, updated
+    return new_key, updated, email
 
 
 def change_password(user, user_budget, current, new, confirm):
@@ -472,7 +486,7 @@ def delete_data(user):
 # ---------- Layout ----------
 
 with gr.Blocks(title="Sliced Bread") as demo:
-    user_state = gr.State(None)  # file key of the signed-in name, "mark_g"
+    user_state = gr.State(None)  # file key of the logged-in account: its email, "mark@example.com"
     budget_state = gr.State(None)  # that name's whole budget
     month_state = gr.State(budget.month_key())  # month on screen, "2026-10"
     open_state = gr.State(None)  # ("add", section) or ("edit", section, index): the one open form
@@ -480,19 +494,29 @@ with gr.Blocks(title="Sliced Bread") as demo:
     menu_state = gr.State(False)  # whether the avatar's menu is open
     subs_open_state = gr.State(False)  # whether the subcategory pop-up is open
 
-    # Sign in: a new name makes a new budget with that password
+    # Log in with email and password, or create an account. Accounts are local JSON files, not a real auth service.
     with gr.Column(elem_classes="sb-card sb-auth") as auth_view:
         html(
             f'<div class="sb-auth-top">{design.duck_full(200)}<div class="sb-wordmark">Sliced Bread</div>'
-            '<div class="sb-note">Know what is left to invest each month</div>'
-            '<span class="sb-chip">New here? Pick a name and a password</span></div>'
+            '<div class="sb-note">Know what is left to invest each month</div></div>'
         )
-        login_username = gr.Textbox(label="Name", placeholder="Your name", html_attributes=gr.InputHTMLAttributes(autocomplete="username"))
-        login_password = gr.Textbox(
-            label="Password", type="password", placeholder=f"At least {storage.MIN_PASSWORD_LENGTH} characters",
-            html_attributes=gr.InputHTMLAttributes(autocomplete="current-password"),
-        )
-        login_button = gr.Button("Sign in", variant="primary", elem_classes="sb-full")
+        with gr.Column(elem_classes="sb-auth-form") as login_panel:
+            html('<div class="sb-title">Log in</div>')
+            login_email = gr.Textbox(label="Email", placeholder="name@example.com", html_attributes=gr.InputHTMLAttributes(autocomplete="username"))
+            login_password = gr.Textbox(label="Password", type="password", html_attributes=gr.InputHTMLAttributes(autocomplete="current-password"))
+            login_button = gr.Button("Log in", variant="primary", elem_classes="sb-full")
+            to_signup_button = gr.Button("New here? Create an account", elem_classes="sb-link-button")
+        with gr.Column(visible=False, elem_classes="sb-auth-form") as signup_panel:
+            html('<div class="sb-title">Create an account</div>')
+            signup_name = gr.Textbox(label="Name", placeholder="Your name", html_attributes=gr.InputHTMLAttributes(autocomplete="name"))
+            signup_email = gr.Textbox(label="Email", placeholder="name@example.com", html_attributes=gr.InputHTMLAttributes(autocomplete="username"))
+            signup_password = gr.Textbox(
+                label="Password", type="password", placeholder=f"At least {storage.MIN_PASSWORD_LENGTH} characters",
+                html_attributes=gr.InputHTMLAttributes(autocomplete="new-password"),
+            )
+            signup_confirm = gr.Textbox(label="Password again", type="password", html_attributes=gr.InputHTMLAttributes(autocomplete="new-password"))
+            signup_button = gr.Button("Create account", variant="primary", elem_classes="sb-full")
+            to_login_button = gr.Button("Have an account? Log in", elem_classes="sb-link-button")
 
     with gr.Column(visible=False, elem_classes="sb-app") as app_view:
         # Header: logo left; the person's name and an avatar that opens a small menu, right.
@@ -671,8 +695,11 @@ with gr.Blocks(title="Sliced Bread") as demo:
             profile_back_button = gr.Button("← Back", elem_classes="sb-back-button")
             with gr.Column(elem_classes="sb-card"):
                 html('<div class="sb-title">Profile</div>')
-                profile_name = gr.Textbox(label="Name", html_attributes=gr.InputHTMLAttributes(autocomplete="username"))
-                profile_email = gr.Textbox(label="Email", placeholder="name@example.com", html_attributes=gr.InputHTMLAttributes(autocomplete="email"))
+                profile_name = gr.Textbox(label="Name", html_attributes=gr.InputHTMLAttributes(autocomplete="name"))
+                profile_email = gr.Textbox(
+                    label="Email", info="You log in with this", placeholder="name@example.com",
+                    html_attributes=gr.InputHTMLAttributes(autocomplete="email"),
+                )
                 save_profile_button = gr.Button("Save profile", variant="primary")
 
             with gr.Column(elem_classes="sb-card"):
@@ -694,11 +721,17 @@ with gr.Blocks(title="Sliced Bread") as demo:
 
     target_boxes = [target_needs, target_wants, target_investing, target_savings]
     session_outputs = [user_state, budget_state, month_state, open_state, auth_view, app_view]
-    signed_in_outputs = session_outputs + [app_tabs, limit_overall, savings_goal, *target_boxes, login_password, plan_modal]
-    signed_out_outputs = session_outputs + [login_password, menu_state, person_menu, profile_view]
+    signed_in_outputs = session_outputs + [
+        app_tabs, limit_overall, savings_goal, *target_boxes, login_password, signup_password, signup_confirm, plan_modal,
+    ]
+    signed_out_outputs = session_outputs + [login_panel, signup_panel, menu_state, person_menu, profile_view]
 
-    for trigger in (login_button.click, login_username.submit, login_password.submit):
-        trigger(sign_in, inputs=[login_username, login_password], outputs=signed_in_outputs)
+    for trigger in (login_button.click, login_email.submit, login_password.submit):
+        trigger(log_in, inputs=[login_email, login_password], outputs=signed_in_outputs)
+    for trigger in (signup_button.click, signup_name.submit, signup_email.submit, signup_password.submit, signup_confirm.submit):
+        trigger(create_account, inputs=[signup_name, signup_email, signup_password, signup_confirm], outputs=signed_in_outputs)
+    to_signup_button.click(lambda: show_signup(True), outputs=[login_panel, signup_panel])
+    to_login_button.click(lambda: show_signup(False), outputs=[login_panel, signup_panel])
 
     # The header follows the budget's name.
     budget_state.change(lambda user_budget: (person_html(user_budget), initial(user_budget)), inputs=budget_state, outputs=[person_name, avatar_button])
@@ -741,7 +774,7 @@ with gr.Blocks(title="Sliced Bread") as demo:
     edit_profile_button.click(open_profile, inputs=budget_state, outputs=[menu_state, person_menu, profile_view, app_tabs, profile_name, profile_email])
     profile_back_button.click(lambda: (gr.update(visible=False), gr.update(visible=True)), outputs=[profile_view, app_tabs])
     sign_out_button.click(sign_out, outputs=signed_out_outputs)
-    save_profile_button.click(save_profile, inputs=[user_state, budget_state, profile_name, profile_email], outputs=[user_state, budget_state])
+    save_profile_button.click(save_profile, inputs=[user_state, budget_state, profile_name, profile_email], outputs=[user_state, budget_state, profile_email])
     change_password_button.click(
         change_password, inputs=[user_state, budget_state, current_password, new_password, confirm_password],
         outputs=[budget_state, current_password, new_password, confirm_password],

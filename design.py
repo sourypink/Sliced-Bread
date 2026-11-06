@@ -472,6 +472,12 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
 .sb-auth-top .sb-wordmark {{ font-size: 40px; margin-top: 4px; }}
 .sb-auth-top .sb-note {{ font-size: 16px; }}
 .sb-full {{ width: 100% !important; }}
+.sb-auth-form {{ gap: 12px !important; margin-top: 8px; }}
+.sb-link-button {{
+  border: none !important; background: transparent !important; box-shadow: none !important;
+  color: var(--sb-accent-dark) !important; font-size: 15px !important; font-weight: 600 !important;
+}}
+.sb-link-button:hover {{ text-decoration: underline; }}
 .sb-danger {{ background: transparent !important; box-shadow: none !important; border-style: dashed !important; }}
 """
 

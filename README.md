@@ -49,9 +49,9 @@ python -m pytest
 
 | File | What it does |
 |---|---|
-| `app.py` | The Gradio screens: sign in, the Budget, History and Goals tabs, and the profile page. The only file that uses Gradio. |
+| `app.py` | The Gradio screens: log in and create account, the Budget, History and Goals tabs, and the profile page. The only file that uses Gradio. |
 | `budget.py` | The math: categories and subcategories, totals, what's left, limit and target alerts, input checks. |
-| `storage.py` | Saves each name's budget as a JSON file, with a salted password hash. |
+| `storage.py` | Saves each account's budget as a JSON file named by its email, with a salted password hash. |
 | `charts.py` | The History tab's chart (categories, then a subcategory, then its items), tiles and table, in plain HTML. |
 | `design.py` | "Pond", the design system: colours, type, spacing, the Gradio theme, CSS and the mallard mascot. |
 | `test_budget.py` | Tests for `budget.py` and `storage.py`. |
@@ -64,7 +64,8 @@ in Savings subcategories plus whatever is left of income.
 
 ## Known limitations
 
-- A new name creates a new budget, and passwords live in the same JSON file as the budget. Fine for a class
-  demo, not for real money: there is no server-side account system, rate limiting or password reset.
+- Accounts are local: email and a salted password hash live in the same JSON file as the budget. Fine for a class
+  demo, not for real money: there is no server-side account system, email verification, rate limiting or
+  password reset.
 - In Colab, saved budgets disappear when the runtime resets.
 - US dollars only; no bank connection; no recurring items yet (rent must be added each month).
