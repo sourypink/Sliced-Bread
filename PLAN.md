@@ -28,15 +28,15 @@ Maps to the brief's feature list:
 | Income tracking | Income section, total at the top |
 | Expense tracking (amount, category, description) | Sections 2–4; the section *is* the category, the line name is the description |
 | Edit a line | ✎ on a line opens it in place; Save or Cancel |
-| Overall + per-category budgets | Goals tab: an overall monthly limit plus one each for Needs and Wants |
+| Overall + per-category budgets | Goals tab: one monthly limit; each category's limit is that times its % |
 | Automatic calculations | `budget.py`; every add or delete recomputes |
 | Budget alerts | Limit meters under the hero shift from green through amber to red as they fill: near limit at 90%, over at 100% |
-| Monthly summary | The hero line and stacked bar at the top of the page; month picker |
+| Monthly summary | The hero line and a donut of where the money went at the top of the page; month picker |
 | Investing with tiers | Investments section: lines grouped under tiers you create by typing a name |
 | Savings goal | Savings card: progress toward the goal set on the Goals tab |
 | History over months | History tab: earned vs money out per month by category (6 / 12 months / All); click a category to see its subcategories, then a subcategory to see its items in shades of its colour; biggest items, a table of every number, and sample months for demos |
-| Percentage targets (50/30/20) | Goals tab sets the four categories' % (45/30/20/5 for the four; typing three fills the fourth to make 100); a split card under the hero compares actual vs target and alerts on overspend |
-| Own categories | Goals tab: add a subcategory and pick which of the four categories it counts toward |
+| Percentage targets (50/30/20) | Goals tab sets the four categories' % (typing three fills the fourth to make 100), or picks one of three cited presets, offered once at sign-up; a split card under the hero compares actual vs target and alerts on overspend |
+| Own categories | Goals tab: add a subcategory and pick which of the four categories it counts toward; the presets can be removed too |
 | Accounts | Sign in with a name and password (salted hash); the avatar menu has Edit profile (name, email, password, delete my data) and Sign out |
 
 ## 2. Screens
@@ -62,7 +62,7 @@ avatar menu. Before sign-in, only the sign-in card.
 ```
 ┌──────────────────────────────────────────────┐
 │ $640 left to invest in October      Oct 2026▾│  ← hero: title states the answer
-│ ███████████▓▓▓▓▓▓░░░░▒▒▒▒                    │  ← where the money went, one bar
+│ ( donut )  ● Needs $1,710  ● Wants $250 ...  │  ← where the money went, a donut and its key
 ├──────────────────────────────────────────────┤
 │ ● Income                          $3,200  [+]│
 │   Salary                          $3,000   × │
@@ -100,12 +100,24 @@ hero says the same.
 
 ### Goals
 
-- Percentage targets for the four categories. Needs and wants are limits; investing and savings are minimums.
-  Typing three fills the fourth to make 100. "Use 45/30/20/5" fills 45/30/20/5.
+- **Your plan**: Monthly limit first, then the four categories' %. Needs and wants are limits; investing and
+  savings are minimums. Typing three fills the fourth to make 100. A line under the boxes shows each % in dollars
+  of the limit ("Needs $1,500 · Wants $900 ..."), and those are the Needs and Wants limits the hero's meters use.
+  With targets off, the limit caps all spending.
+- **Choose a preset** opens "Pick a plan": the Monthly limit, then three presets, each with the research behind it.
+  A new account sees it once after its first sign-in; "Set my own" closes it for good.
+
+  | Preset | Needs/Wants/Investing/Savings | Basis |
+  |---|---|---|
+  | Balanced | 50/30/15/5 | Warren & Tyagi, *All Your Worth* (2005), 50/30/20; Fidelity's 50/15/5 saving guideline |
+  | Safety net first | 50/20/10/20 | Vanguard (2025, 12,400 investors): $2,000+ in emergency savings, 21% higher financial well-being |
+  | Invest more | 45/20/30/5 | Fidelity: save more than 15% to retire before 67; Bengen (1994), the 4% rule: 25x yearly spending |
+
 - "Edit subcategories" opens a pop-up, grouped under each category's marker: rename and move with a category
-  picker, saved together on Confirm (Cancel discards). ✕ removes your own (only when empty) and the add row
-  (name and the category it counts toward) save straight away.
-- Monthly limits, right under the targets: overall, Needs, Wants (blank = no limit, no meter). Savings goal.
+  picker, saved together on Confirm (Cancel discards). ✕ removes any subcategory, presets included (tagged
+  "Preset"), only when empty; it and the add row (name and the category it counts toward) save straight away.
+- Savings goal, in its own card.
+- Every amount box shows $ and commas as you type.
 
 ### Profile (avatar menu, then Edit profile)
 
@@ -136,8 +148,9 @@ sliced-bread/
 {
   "account": {"name": "Mark", "email": "", "salt": "(hex)", "password_hash": "(hex)"},
   "settings": {"savings_goal": 500000,
-               "limits": {"overall": 250000, "needs": 180000, "wants": 50000},
-               "targets": {"needs": 45, "wants": 30, "investing": 20, "savings": 5},
+               "limits": {"overall": 300000},
+               "targets": {"needs": 50, "wants": 30, "investing": 15, "savings": 5},
+               "plan_chosen": true, "removed_presets": ["travel"],
                "subcategories": [{"key": "necessities", "name": "Necessities", "category": "needs"},
                                  {"key": "pets", "name": "Pets", "category": "wants"}]},
   "months": {"2026-10": {"income": [{"name": "Salary", "amount": 300000}],

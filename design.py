@@ -5,6 +5,7 @@ Amber means near a limit, red means over. Nothing in app.py sets a colour or siz
 """
 
 import html
+import math
 
 import gradio as gr
 
@@ -47,9 +48,40 @@ DUCK_BILL = "#E8B931"
 DUCK_BREAST = "#7A3E1D"
 DUCK_BODY = "#B9B3A8"
 
+# The hero donut, in px.
+DONUT_SIZE = 148
+DONUT_STROKE = 18  # ring thickness: thin, so the number in the middle leads
+DONUT_GAP = 2  # card-coloured gap between segments
+
 FONT_TEXT = "Geist"
 FONT_DISPLAY = "Instrument Serif"
 PAGE_MAX_WIDTH = "640px"
+
+# Amount boxes (class sb-money-input) show "$1,234.56" as you type. The caret keeps its place among the digits, and
+# a fresh input event tells Gradio the new text; formatting twice changes nothing, so that event stops there.
+MONEY_INPUT_SCRIPT = r"""<script>
+function sbMoneyText(text) {
+  var cleaned = text.replace(/[^0-9.]/g, '');
+  if (!cleaned) return '';
+  var point = cleaned.indexOf('.');
+  var whole = (point < 0 ? cleaned : cleaned.slice(0, point)).replace(/^0+(?=\d)/, '');
+  var fraction = point < 0 ? null : cleaned.slice(point + 1).replace(/\./g, '').slice(0, 2);
+  whole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') || (fraction !== null ? '0' : '');
+  return '$' + whole + (fraction !== null ? '.' + fraction : '');
+}
+document.addEventListener('input', function (event) {
+  var box = event.target;
+  if (!box.closest || !box.closest('.sb-money-input')) return;
+  var typed = box.value, formatted = sbMoneyText(typed);
+  if (formatted === typed) return;
+  var after = typed.slice(box.selectionEnd || typed.length).replace(/[^0-9.]/g, '').length;
+  var caret = formatted.length, seen = 0;
+  while (caret > 0 && seen < after) { caret--; if (/[0-9.]/.test(formatted[caret])) seen++; }
+  box.value = formatted;
+  box.setSelectionRange(caret, caret);
+  box.dispatchEvent(new Event('input', {bubbles: true}));
+});
+</script>"""
 
 # Loaded in <head> so both faces are ready before first paint.
 HEAD = (
@@ -66,6 +98,7 @@ HEAD = (
     "    if (label.textContent.trim() === choice) label.querySelector('input').click();"
     "  });"
     "});</script>"
+    + MONEY_INPUT_SCRIPT
 )
 
 # Green and paper as Gradio colour ramps, so built-in components pick them up.
@@ -251,6 +284,10 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
 }}
 .sb-modal-card {{ width: 100%; max-width: {PAGE_MAX_WIDTH}; max-height: 100%; overflow-y: auto; flex: none !important; }}
 .sb-sub-row {{ gap: 8px !important; }}
+.sb-preset-tag {{ font-size: 14px; color: var(--sb-muted); margin-top: -4px; }}
+/* The plan chooser: each preset's shares, why, and the research behind it. */
+.sb-preset-split {{ font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; margin-top: 2px; }}
+.sb-source {{ font-size: 14px; color: var(--sb-muted); font-style: italic; margin-top: 4px; }}
 .sb-split-row {{ display: grid; gap: 8px; justify-items: start; }}
 .sb-split-row > .sb-meter-row {{ width: 100%; }}
 .sb-head .sb-title {{ flex-wrap: wrap; row-gap: 6px; min-width: 0; }}
@@ -259,9 +296,20 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
 /* Hero: the month, one big number, where the money went, and the duck. */
 .sb-hero-top {{ align-items: center !important; flex-wrap: nowrap !important; }}
 .sb-month-label {{ font-size: 16px; font-weight: 600; text-align: center; }}
-.sb-bar {{ display: flex; gap: 3px; height: 12px; margin: 20px 0 12px; }}
-.sb-bar > span {{ border-radius: 999px; min-width: 6px; }}
-.sb-bar-empty {{ flex: 1; background: var(--sb-line); }}
+/* Where the money went: the donut, its key beside it, stacked under it on a phone. */
+.sb-donut-row {{ display: flex; align-items: center; gap: 24px; margin: 20px 0 4px; }}
+.sb-donut-row .sb-key {{ flex-direction: column; }}
+@media (max-width: 420px) {{
+  .sb-donut-row {{ flex-direction: column; gap: 16px; }}
+  .sb-donut-row .sb-key {{ flex-direction: row; justify-content: center; }}
+}}
+.sb-donut {{ position: relative; flex: none; }}
+.sb-donut svg {{ display: block; }}
+.sb-donut-middle {{
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+}}
+.sb-donut-amount {{ font-family: var(--sb-serif); font-size: 26px; line-height: 1; font-variant-numeric: tabular-nums; }}
+.sb-donut-label {{ font-size: 14px; color: var(--sb-muted); margin-top: 4px; }}
 .sb-key {{ display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px; color: var(--sb-muted); }}
 .sb-key span {{ display: inline-flex; align-items: center; gap: 6px; }}
 .sb-key .sb-money {{ color: var(--sb-ink); }}
@@ -517,6 +565,36 @@ def subcategory_colors(user_budget):
         keys = [sub["key"] for sub in budget.subcategories_in(user_budget, category)]
         colors.update(zip(keys, shades(color, len(keys), SUBCATEGORY_DARKEST_MIX, SUBCATEGORY_LIGHTEST_MIX)))
     return colors
+
+
+def donut_svg(amounts, income):
+    """The hero ring: one segment per category with money in it, income in the middle. A grey ring when empty."""
+    radius = (DONUT_SIZE - DONUT_STROKE) / 2
+    circumference = 2 * math.pi * radius
+    centre = DONUT_SIZE / 2
+    whole = sum(amounts.values())
+    parts = [(category, cents) for category, cents in amounts.items() if cents]
+    ring = (
+        f'<circle cx="{centre}" cy="{centre}" r="{radius}" fill="none" stroke="{LINE}" stroke-width="{DONUT_STROKE}"></circle>'
+    )
+    start = 0.0
+    segments = ""
+    for category, cents in parts:
+        length = cents / whole * circumference
+        gap = DONUT_GAP if len(parts) > 1 else 0
+        title = f"{budget.CATEGORY_NAMES[category]} {budget.format_money(cents)} ({round(cents * 100 / whole)}%)"
+        segments += (
+            f'<circle cx="{centre}" cy="{centre}" r="{radius}" fill="none" stroke="{CATEGORY_COLORS[category]}" '
+            f'stroke-width="{DONUT_STROKE}" stroke-dasharray="{max(length - gap, 0):.2f} {circumference:.2f}" '
+            f'stroke-dashoffset="{-start:.2f}" transform="rotate(-90 {centre} {centre})"><title>{title}</title></circle>'
+        )
+        start += length
+    return (
+        f'<div class="sb-donut"><svg width="{DONUT_SIZE}" height="{DONUT_SIZE}" viewBox="0 0 {DONUT_SIZE} {DONUT_SIZE}" '
+        f'role="img" aria-label="Where the money went">{ring if not parts else ""}{segments}</svg>'
+        f'<div class="sb-donut-middle"><span class="sb-donut-amount">{budget.format_money(income)}</span>'
+        '<span class="sb-donut-label">income</span></div></div>'
+    )
 
 
 def dot(color):
