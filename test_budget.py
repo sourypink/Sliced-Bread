@@ -52,8 +52,15 @@ def test_format_money(cents, shown):
 
 # ---------- budget.py: calculations ----------
 
+def add_travel_and_emergency_fund(user_budget):
+    """The two subcategories many tests use; users add them, they aren't presets."""
+    budget.add_subcategory(user_budget, "Travel", "wants")
+    budget.add_subcategory(user_budget, "Emergency fund", "savings")
+    return user_budget
+
+
 def make_budget():
-    user_budget = budget.empty_budget()
+    user_budget = add_travel_and_emergency_fund(budget.empty_budget())
     for section, name, amount in [
         ("income", "Salary", "3000"), ("income", "Freelance", "200"),
         ("necessities", "Rent", "1200"), ("necessities", "Groceries", "380.50"),
@@ -186,7 +193,7 @@ def test_target_meters_compare_spending_to_share_of_income():
 
 
 def test_target_meters_flag_overspending_and_short_minimums():
-    user_budget = budget.empty_budget()
+    user_budget = add_travel_and_emergency_fund(budget.empty_budget())
     budget.add_item(user_budget, "2026-10", "income", "Job", "1000")
     budget.add_item(user_budget, "2026-10", "necessities", "Rent", "600")
     budget.add_item(user_budget, "2026-10", "travel", "Trip", "300")
@@ -241,19 +248,26 @@ def test_budgets_saved_before_investments_existed_still_work():
 def test_new_budgets_start_with_the_presets_in_their_categories():
     subs = budget.subcategories(budget.empty_budget())
     assert [(sub["key"], sub["category"]) for sub in subs] == [
-        ("necessities", "needs"), ("discretionary", "wants"), ("travel", "wants"), ("investments", "investing"),
-        ("emergency_fund", "savings"),
+        ("necessities", "needs"), ("discretionary", "wants"), ("investments", "investing"),
     ]
+
+
+def test_old_budgets_keep_a_retired_preset_that_holds_lines():
+    user_budget = budget.empty_budget()
+    assert "travel" not in budget.section_keys(user_budget)
+    user_budget["months"]["2026-10"] = {"travel": [{"name": "Flights", "amount": 30000}]}
+    assert "travel" in budget.section_keys(user_budget) and "emergency_fund" not in budget.section_keys(user_budget)
+    assert budget.category_total(user_budget, budget.get_month(user_budget, "2026-10"), "wants") == 30000
 
 
 def test_budgets_saved_before_a_new_preset_get_it():
     user_budget = make_budget()
     pets = budget.add_subcategory(user_budget, "Pets", "wants")
     stored = user_budget["settings"]["subcategories"]
-    stored.remove(next(sub for sub in stored if sub["key"] == "emergency_fund"))
-    assert [sub["key"] for sub in budget.subcategories(user_budget)][-2:] == ["pets", "emergency_fund"]
-    budget.rename_subcategory(user_budget, "emergency_fund", "Rainy day")
-    assert stored[-1] == {"key": "emergency_fund", "name": "Rainy day", "category": "savings"} and pets in stored
+    stored.remove(next(sub for sub in stored if sub["key"] == "investments"))
+    assert [sub["key"] for sub in budget.subcategories(user_budget)][-2:] == ["pets", "investments"]
+    budget.rename_subcategory(user_budget, "investments", "Stocks")
+    assert stored[-1] == {"key": "investments", "name": "Stocks", "category": "investing"} and pets in stored
 
 
 def test_added_subcategory_counts_toward_its_category():
@@ -267,7 +281,7 @@ def test_added_subcategory_counts_toward_its_category():
 
 
 def test_subcategory_names_must_be_unique_and_not_a_category():
-    user_budget = budget.empty_budget()
+    user_budget = add_travel_and_emergency_fund(budget.empty_budget())
     for name in ("travel", "Needs", "Income", "all spending"):
         with pytest.raises(ValueError, match="You already have"):
             budget.add_subcategory(user_budget, name, "wants")
@@ -276,7 +290,7 @@ def test_subcategory_names_must_be_unique_and_not_a_category():
 
 
 def test_subcategory_keys_never_clash():
-    user_budget = budget.empty_budget()
+    user_budget = add_travel_and_emergency_fund(budget.empty_budget())
     budget.rename_subcategory(user_budget, "travel", "Trips")
     assert budget.add_subcategory(user_budget, "Travel", "wants")["key"] == "travel_2"
     assert budget.add_subcategory(user_budget, "!!!", "needs")["key"] == "subcategory"
@@ -325,10 +339,10 @@ def test_remove_refuses_subcategories_with_items():
 
 def test_a_removed_preset_stays_removed():
     user_budget = make_budget()
-    budget.remove_subcategory(user_budget, "emergency_fund")
-    assert "emergency_fund" not in budget.section_keys(user_budget)
+    budget.remove_subcategory(user_budget, "investments")
+    assert "investments" not in budget.section_keys(user_budget)
     budget.rename_subcategory(user_budget, "travel", "Trips")  # writes the list out again; the preset must not return
-    assert "emergency_fund" not in budget.section_keys(user_budget)
+    assert "investments" not in budget.section_keys(user_budget)
 
 
 def test_removing_investments_leaves_sample_months_working():
@@ -482,7 +496,7 @@ def test_chart_views_drill_from_categories_to_subcategories_to_items():
 
 
 def test_subcategory_colors_are_shades_of_their_category():
-    user_budget = budget.empty_budget()
+    user_budget = add_travel_and_emergency_fund(budget.empty_budget())
     colors = design.subcategory_colors(user_budget)
     assert colors["necessities"] == design.CATEGORY_COLORS["needs"]  # alone in its category: the colour itself
     assert colors["discretionary"] != colors["travel"]

@@ -12,11 +12,14 @@ SPENDING_CATEGORIES = ("needs", "wants")  # what limits and "spent" cover; inves
 PRESET_SUBCATEGORIES = (
     {"key": "necessities", "name": "Necessities", "category": "needs"},
     {"key": "discretionary", "name": "Discretionary", "category": "wants"},
-    {"key": "travel", "name": "Travel", "category": "wants"},
     {"key": "investments", "name": "Investments", "category": "investing"},
-    {"key": "emergency_fund", "name": "Emergency fund", "category": "savings"},
 )
 PRESET_KEYS = tuple(preset["key"] for preset in PRESET_SUBCATEGORIES)
+# Former presets: kept in budgets that hold lines under them but never saved their list, so no money goes missing.
+RETIRED_PRESETS = (
+    {"key": "travel", "name": "Travel", "category": "wants"},
+    {"key": "emergency_fund", "name": "Emergency fund", "category": "savings"},
+)
 MAX_CUSTOM_SUBCATEGORIES = 8
 ALL_SPENDING = "All spending"  # History's unzoomed view
 UNSAFE_KEY_CHARACTERS = re.compile(r"[^a-z0-9]+")
@@ -115,7 +118,9 @@ def format_money(cents):
 def missing_presets(budget, subs):
     """Presets a saved list lacks (saved before subcategories, or before a preset was added), unless removed."""
     keys = {sub["key"] for sub in subs} | set(budget["settings"].get("removed_presets", []))
-    return [dict(preset) for preset in PRESET_SUBCATEGORIES if preset["key"] not in keys]
+    used = {section for month in budget["months"].values() for section, items in month.items() if items}
+    retired = [preset for preset in RETIRED_PRESETS if preset["key"] in used]
+    return [dict(preset) for preset in PRESET_SUBCATEGORIES + tuple(retired) if preset["key"] not in keys]
 
 
 def subcategories(budget):
@@ -452,14 +457,14 @@ SAMPLE_MONTHS = [
      ("necessities", "Groceries", 365), ("necessities", "Gas", 95), ("discretionary", "Concert tickets", 140),
      ("discretionary", "Streaming", 28), SAMPLE_ROTH, SAMPLE_INDEX],
     [("income", "Salary", 3000), ("necessities", "Rent", 1200), ("necessities", "Groceries", 410),
-     ("necessities", "Gas", 120), ("discretionary", "Streaming", 28), ("travel", "Flights", 380),
-     ("travel", "Hotel", 420), ("travel", "Food on the trip", 160), SAMPLE_ROTH],
+     ("necessities", "Gas", 120), ("discretionary", "Streaming", 28), ("discretionary", "Flights", 380),
+     ("discretionary", "Hotel", 420), ("discretionary", "Food on the trip", 160), SAMPLE_ROTH],
     [("income", "Salary", 3000), ("income", "Freelance", 400), ("necessities", "Rent", 1200),
      ("necessities", "Groceries", 350), ("necessities", "Gas", 105), ("discretionary", "Video game", 70),
      ("discretionary", "Streaming", 28), SAMPLE_ROTH, SAMPLE_INDEX],
     [("income", "Salary", 3000), ("necessities", "Rent", 1200), ("necessities", "Groceries", 375),
      ("necessities", "Gas", 115), ("discretionary", "Movies", 45), ("discretionary", "Streaming", 28),
-     ("travel", "Weekend train", 90), SAMPLE_ROTH, SAMPLE_INDEX],
+     ("discretionary", "Weekend train", 90), SAMPLE_ROTH, SAMPLE_INDEX],
 ]
 def month_history(budget, end_key, count):
     """One row per month, oldest first, ending at end_key. Months with nothing entered are zeros."""

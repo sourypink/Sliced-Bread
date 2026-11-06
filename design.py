@@ -300,13 +300,9 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
 /* Hero: the month, one big number, where the money went, and the duck. */
 .sb-hero-top {{ align-items: center !important; flex-wrap: nowrap !important; }}
 .sb-month-label {{ font-size: 16px; font-weight: 600; text-align: center; }}
-/* Where the money went: the donut, its key beside it, stacked under it on a phone. */
-.sb-donut-row {{ display: flex; align-items: center; gap: 24px; margin: 20px 0 4px; }}
-.sb-donut-row .sb-key {{ flex-direction: column; }}
-@media (max-width: 420px) {{
-  .sb-donut-row {{ flex-direction: column; gap: 16px; }}
-  .sb-donut-row .sb-key {{ flex-direction: row; justify-content: center; }}
-}}
+/* Where the money went: the donut centred, its key in a centred row underneath. */
+.sb-donut-row {{ display: flex; flex-direction: column; align-items: center; gap: 16px; margin: 20px 0 4px; }}
+.sb-donut-row .sb-key {{ justify-content: center; }}
 .sb-donut {{ position: relative; flex: none; }}
 .sb-donut svg {{ display: block; }}
 .sb-donut-middle {{

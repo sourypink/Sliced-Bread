@@ -15,15 +15,12 @@ INCOME_NAME = "Income"
 EMPTY_STATES = {
     "income": "No income yet. Add your salary, freelance or other pay.",
     "necessities": "Nothing yet. Add rent, groceries, gas.",
-    "discretionary": "Nothing yet. Add movies, events, games, subscriptions.",
-    "travel": "No trips yet. Add flights, hotels, food.",
+    "discretionary": "Nothing yet. Add movies, trips, games, subscriptions.",
     "investments": "Nothing yet. Add a Roth IRA, index fund or brokerage deposit.",
-    "emergency_fund": "Nothing yet. Add what you move into savings.",
 }
 CUSTOM_EMPTY_STATE = "Nothing yet."
 NAME_PLACEHOLDERS = {
-    "income": "Salary", "necessities": "Rent", "discretionary": "Concert tickets", "travel": "Flights", "investments": "Roth IRA",
-    "emergency_fund": "Transfer",
+    "income": "Salary", "necessities": "Rent", "discretionary": "Concert tickets", "investments": "Roth IRA",
 }
 MONTHLY_LIMIT = "Monthly limit"
 CATEGORY_PICKER_WIDTH = 124  # px: fits "Investing" and the dropdown arrow
@@ -115,12 +112,11 @@ def hero_html(user_budget, key):
     month = budget.get_month(user_budget, key)
     income = budget.section_total(month, budget.INCOME)
     left = budget.leftover(user_budget, month)
-    name = budget.month_name(key)
 
     if left >= 0:
-        top = f'<div class="sb-eyebrow">Left to save in {name}</div><div class="sb-hero-amount">{budget.format_money(left)}</div>'
+        top = f'<div class="sb-eyebrow">Left to save</div><div class="sb-hero-amount">{budget.format_money(left)}</div>'
     else:
-        top = f'<div class="sb-eyebrow">Over budget in {name}</div><div class="sb-hero-amount sb-over">{budget.format_money(-left)}</div>'
+        top = f'<div class="sb-eyebrow">Over budget</div><div class="sb-hero-amount sb-over">{budget.format_money(-left)}</div>'
 
     amounts = {category: budget.category_total(user_budget, month, category) for category in budget.CATEGORIES}
     amounts["savings"] = budget.saved(user_budget, month)
@@ -309,9 +305,11 @@ def plan_outputs(updated):
     return updated, dollars_text(settings["limits"]["overall"]), *target_texts(settings["targets"]), None
 
 
-def save_plan(user, user_budget, limit_text, needs, wants, investing, savings):
+def save_plan(user, user_budget, limit_text, goal_text, needs, wants, investing, savings):
+    """Save plan: the monthly limit, the savings goal and the four targets together."""
     def apply(updated):
         set_plan(updated, limit_text, budget.parse_targets(needs, wants, investing, savings))
+        updated["settings"]["savings_goal"] = parse_field("Savings goal", goal_text)
     updated = changed(user, user_budget, apply)
     gr.Info("Plan saved" if updated["settings"]["targets"] else "Plan saved, targets off", title="Saved")
     return plan_outputs(updated)
@@ -330,12 +328,6 @@ def set_own_plan(user, user_budget, limit_text):
     """The chooser's "Set my own": keep the Goals tab's monthly limit and the current targets, and close."""
     updated = changed(user, user_budget, lambda changing: set_plan(changing, limit_text, changing["settings"]["targets"]))
     return *plan_outputs(updated), gr.update(visible=False)
-
-
-def save_goal(user, user_budget, goal):
-    updated = changed(user, user_budget, lambda changing: changing["settings"].update(savings_goal=parse_field("Savings goal", goal)))
-    gr.Info("Savings goal saved", title="Saved")
-    return updated
 
 
 def preset_html(preset):
@@ -625,6 +617,7 @@ with gr.Blocks(title="Sliced Bread") as demo:
                 with gr.Column(elem_classes="sb-card"):
                     html('<div class="sb-title">Your plan</div>')
                     limit_overall = money_box(MONTHLY_LIMIT, placeholder="No limit")
+                    savings_goal = money_box("Savings goal", placeholder="No goal")
                     with gr.Row():
                         target_needs = gr.Textbox(label="Needs %", placeholder="Off", min_width=0)
                         target_wants = gr.Textbox(label="Wants %", placeholder="Off", min_width=0)
@@ -636,11 +629,6 @@ with gr.Blocks(title="Sliced Bread") as demo:
                         choose_preset_button = gr.Button("Choose a preset")
                         save_plan_button = gr.Button("Save plan", variant="primary")
                     edit_subs_button = gr.Button("Edit subcategories")
-
-                with gr.Column(elem_classes="sb-card"):
-                    html('<div class="sb-title">Savings goal</div>')
-                    savings_goal = money_box("Savings goal", placeholder="No goal")
-                    save_goal_button = gr.Button("Save goal", variant="primary")
 
         # The subcategory editor: a pop-up over the page from Goals' "Edit subcategories". Renames and moves wait for
         # Confirm; ✕ and Add subcategory save straight away.
@@ -752,14 +740,13 @@ with gr.Blocks(title="Sliced Bread") as demo:
     for box in (limit_overall, *target_boxes):
         box.change(plan_line_html, inputs=[limit_overall, *target_boxes], outputs=plan_line, trigger_mode="always_last", show_progress="hidden")
     plan_saved_outputs = [budget_state, limit_overall, *target_boxes, auto_target_state]
-    save_plan_button.click(save_plan, inputs=[user_state, budget_state, limit_overall, *target_boxes], outputs=plan_saved_outputs)
+    save_plan_button.click(save_plan, inputs=[user_state, budget_state, limit_overall, savings_goal, *target_boxes], outputs=plan_saved_outputs)
     choose_preset_button.click(lambda: gr.update(visible=True), outputs=plan_modal)
     for preset, button in preset_buttons:
         button.click(make_use_preset(preset), inputs=[user_state, budget_state, limit_overall], outputs=plan_saved_outputs + [plan_modal])
     set_own_button.click(set_own_plan, inputs=[user_state, budget_state, limit_overall], outputs=plan_saved_outputs + [plan_modal])
     edit_subs_button.click(lambda: True, outputs=subs_open_state)
     subs_open_state.change(lambda subs_open: gr.update(visible=subs_open), inputs=subs_open_state, outputs=subs_modal)
-    save_goal_button.click(save_goal, inputs=[user_state, budget_state, savings_goal], outputs=budget_state)
 
     history_outputs = [history_tiles, history_chart, history_items, items_card, sample_card]
     history_inputs = [budget_state, range_pick, zoom_pick]

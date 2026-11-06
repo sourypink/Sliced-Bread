@@ -7,7 +7,7 @@ left to save each month, warns you near and over your limits, checks your split 
 research-backed plans (or your own), and tracks a savings goal.
 
 Money goes into four fixed **categories** (Needs, Wants, Investing, Savings). Each category holds
-**subcategories**: Necessities, Discretionary, Travel, Investments and Emergency fund to start, plus any you add on
+**subcategories**: Necessities, Discretionary and Investments to start (Savings has none until you add one), plus any you add on
 the Goals tab and place in one of the four. Each subcategory holds **items**, like Rent. A small marker on every card
 shows which category it counts toward.
 
