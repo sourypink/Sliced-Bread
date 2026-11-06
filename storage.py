@@ -1,4 +1,4 @@
-"""Saved budgets for Sliced Bread: one JSON file per name in DATA_DIR, with a salted password hash inside."""
+"""Saved budgets for Sliced Bread: one JSON file per account email in DATA_DIR, with a salted password hash inside."""
 
 import hashlib
 import hmac
@@ -12,12 +12,12 @@ import budget
 # Set SLICED_BREAD_DATA to save budgets somewhere other than ./data.
 DATA_DIR = os.environ.get("SLICED_BREAD_DATA", "data")
 MAX_NAME_LENGTH = 30  # characters
-UNSAFE_FILE_CHARACTERS = re.compile(r"[^a-z0-9_-]+")
 MIN_PASSWORD_LENGTH = 8  # characters
 PASSWORD_ITERATIONS = 600_000  # PBKDF2-SHA256 rounds, OWASP's 2023 figure
 SALT_BYTES = 16
 MAX_EMAIL_LENGTH = 254  # characters, the longest an address can be
-EMAIL_SHAPE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+# Lowercase letters, digits and . _ % + - only, so the address itself is a safe file name.
+EMAIL_SHAPE = re.compile(r"[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}")
 
 
 def clean_name(text):
@@ -30,25 +30,13 @@ def clean_name(text):
     return name
 
 
-def file_key(name):
-    """The file a name's budget lives in: 'Mark G' is 'mark_g'. Anything that isn't a letter or digit is dropped."""
-    key = UNSAFE_FILE_CHARACTERS.sub("_", clean_name(name).lower()).strip("_")
-    if not key:
-        raise ValueError("Name needs at least one letter or number")
-    return key
-
-
 def _path(key):
     return os.path.join(DATA_DIR, f"{key}.json")
 
 
 def load_budget(key):
-    """The saved budget for this key, or a new empty one."""
-    try:
-        with open(_path(key), encoding="utf-8") as file:
-            return json.load(file)
-    except FileNotFoundError:
-        return budget.empty_budget()
+    with open(_path(key), encoding="utf-8") as file:
+        return json.load(file)
 
 
 def save_budget(key, user_budget):
@@ -66,10 +54,14 @@ def delete_budget(key):
         os.remove(_path(key))
 
 
+def account_exists(key):
+    return os.path.exists(_path(key))
+
+
 def rename_budget(old_key, new_key):
-    """Move a budget to a new name's file. Refuses a name someone else already has."""
-    if os.path.exists(_path(new_key)):
-        raise ValueError("That name is taken")
+    """Move a budget to a new email's file. Refuses an email another account already has."""
+    if account_exists(new_key):
+        raise ValueError("Another account already uses that email")
     os.replace(_path(old_key), _path(new_key))
 
 
@@ -96,23 +88,33 @@ def new_password(password):
 
 
 def clean_email(text):
-    """A trimmed email address, blank allowed. Raises ValueError if it can't be one."""
-    email = (text or "").strip()
-    if email and (len(email) > MAX_EMAIL_LENGTH or not EMAIL_SHAPE.fullmatch(email)):
+    """The account's email, trimmed and lowercased; also its file key. Raises ValueError if it can't be one."""
+    email = (text or "").strip().lower()
+    if not email:
+        raise ValueError("Enter your email")
+    if len(email) > MAX_EMAIL_LENGTH or not EMAIL_SHAPE.fullmatch(email):
         raise ValueError("Email should look like name@example.com")
     return email
 
 
-def sign_in(name_text, password):
-    """(file key, budget) for a name and password. A new name, or a budget saved before passwords, takes this one."""
+def create_account(name_text, email_text, password, confirm):
+    """(file key, budget) for a new account. Refuses an email that already has one."""
     name = clean_name(name_text)
-    key = file_key(name)
-    user_budget = load_budget(key)
-    account = user_budget.get("account", {})
-    if account.get("password_hash"):
-        if not check_password(account, password):
-            raise ValueError("That name and password don't match")
-        return key, user_budget
-    user_budget["account"] = {"name": name, "email": "", **new_password(password)}
+    key = clean_email(email_text)
+    if account_exists(key):
+        raise ValueError("An account with that email already exists. Log in instead")
+    if password != confirm:
+        raise ValueError("The passwords don't match")
+    user_budget = budget.empty_budget()
+    user_budget["account"] = {"name": name, "email": key, **new_password(password)}
     save_budget(key, user_budget)
+    return key, user_budget
+
+
+def log_in(email_text, password):
+    """(file key, budget) for an email and its password. Says the same thing for an unknown email as a wrong password."""
+    key = clean_email(email_text)
+    user_budget = load_budget(key) if account_exists(key) else None
+    if not (user_budget and check_password(user_budget["account"], password)):
+        raise ValueError("That email and password don't match")
     return key, user_budget

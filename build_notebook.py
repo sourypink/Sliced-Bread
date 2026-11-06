@@ -8,10 +8,10 @@ PREVIEW_HEIGHT = 900  # px, the app's frame inside the notebook
 # (file, what it is), in the order a reader should meet them.
 SOURCE_FILES = [
     ("budget.py", "The math: categories and subcategories, totals, what is left, limit and target alerts, input checks. No Gradio here."),
-    ("storage.py", "Saves each name's budget as a JSON file, with a salted hash of its password."),
+    ("storage.py", "Saves each account's budget as a JSON file named by its email, with a salted hash of its password."),
     ("design.py", "Pond, the design system: colours, type, spacing, the Gradio theme, the CSS and the mallard mascot."),
     ("charts.py", "The History tab's chart, tiles and table: categories, then a subcategory, then its items. Plain HTML."),
-    ("app.py", "The Gradio screens: sign in, the Budget, History and Goals tabs, and the profile page. The only file that uses Gradio."),
+    ("app.py", "The Gradio screens: log in and create account, the Budget, History and Goals tabs, and the profile page. The only file that uses Gradio."),
     ("test_budget.py", "Automated tests for budget.py and storage.py."),
 ]
 
