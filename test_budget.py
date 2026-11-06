@@ -9,6 +9,8 @@ import charts
 import design
 import storage
 
+TARGETS_45_30_20_5 = {"needs": 45, "wants": 30, "investing": 20, "savings": 5}  # what the meter tests were written for
+
 
 # ---------- budget.py: input validation ----------
 
@@ -175,7 +177,7 @@ def test_parse_targets_rejects(typed, message):
 def test_target_meters_compare_spending_to_share_of_income():
     # Income $3,200; needs $1,580.50; wants $340; nothing invested; saved $1,279.50.
     user_budget = make_budget()
-    meters = budget.target_meters(user_budget, budget.RULE_45_30_20_5, budget.get_month(user_budget, "2026-10"))
+    meters = budget.target_meters(user_budget, TARGETS_45_30_20_5, budget.get_month(user_budget, "2026-10"))
     assert meters["needs"]["actual_percent"] == 49 and meters["needs"]["state"] == "over"
     assert meters["needs"]["label"] == "Over by $140.50"
     assert meters["wants"]["actual_percent"] == 11 and meters["wants"]["label"] == "$620 left"
@@ -189,7 +191,7 @@ def test_target_meters_flag_overspending_and_short_minimums():
     budget.add_item(user_budget, "2026-10", "necessities", "Rent", "600")
     budget.add_item(user_budget, "2026-10", "travel", "Trip", "300")
     budget.add_item(user_budget, "2026-10", "investments", "Roth IRA", "60", "Retirement")
-    meters = budget.target_meters(user_budget, budget.RULE_45_30_20_5, budget.get_month(user_budget, "2026-10"))
+    meters = budget.target_meters(user_budget, TARGETS_45_30_20_5, budget.get_month(user_budget, "2026-10"))
     assert meters["needs"]["label"] == "Over by $150"
     assert meters["wants"]["state"] == "warn"
     assert meters["investing"]["state"] == "warn" and meters["investing"]["label"] == "$140 short"
@@ -200,7 +202,7 @@ def test_target_meters_empty_without_targets_or_income():
     user_budget = make_budget()
     month = budget.get_month(user_budget, "2026-10")
     assert budget.target_meters(user_budget, {}, month) == {}
-    assert budget.target_meters(user_budget, budget.RULE_45_30_20_5, budget.get_month(user_budget, "2030-01")) == {}
+    assert budget.target_meters(user_budget, TARGETS_45_30_20_5, budget.get_month(user_budget, "2030-01")) == {}
 
 
 def test_targets_saved_with_three_shares_count_as_off():
@@ -334,10 +336,10 @@ def test_rename_keeps_the_lines():
     budget.rename_subcategory(user_budget, "travel", "TRIPS")  # its own name in other capitals is fine
 
 
-def test_remove_refuses_presets_and_subcategories_with_items():
+def test_remove_refuses_subcategories_with_items():
     user_budget = make_budget()
-    with pytest.raises(ValueError, match="built in"):
-        budget.remove_subcategory(user_budget, "travel")
+    with pytest.raises(ValueError, match="has items in 1 month"):
+        budget.remove_subcategory(user_budget, "travel")  # a preset, but it holds Flights
     budget.add_subcategory(user_budget, "Pets", "wants")
     budget.add_item(user_budget, "2026-10", "pets", "Vet", "60")
     with pytest.raises(ValueError, match="has items in 1 month. Delete them first"):
@@ -348,6 +350,59 @@ def test_remove_refuses_presets_and_subcategories_with_items():
     assert "pets" not in user_budget["months"]["2026-10"]
 
 
+def test_a_removed_preset_stays_removed():
+    user_budget = make_budget()
+    budget.remove_subcategory(user_budget, "emergency_fund")
+    assert "emergency_fund" not in budget.section_keys(user_budget)
+    budget.rename_subcategory(user_budget, "travel", "Trips")  # writes the list out again; the preset must not return
+    assert "emergency_fund" not in budget.section_keys(user_budget)
+
+
+def test_removing_investments_leaves_tiers_and_sample_months_working():
+    user_budget = budget.empty_budget()
+    budget.remove_subcategory(user_budget, "investments")
+    assert budget.tiers(user_budget) == []
+    assert budget.fill_sample_months(user_budget, "2026-11") == 5
+    assert budget.month_history(user_budget, "2026-10", 1)[0]["invested"] == 0
+    assert budget.tiers(user_budget) == []
+
+
+# ---------- budget.py: plan presets and the monthly limit ----------
+
+def test_every_plan_preset_covers_all_four_categories_and_makes_100():
+    for preset in budget.PLAN_PRESETS:
+        assert set(preset["targets"]) == set(budget.CATEGORIES)
+        assert sum(preset["targets"].values()) == budget.PERCENT_WHOLE
+        assert budget.parse_targets(*(str(preset["targets"][category]) for category in budget.CATEGORIES)) == preset["targets"]
+
+
+def test_category_limits_are_the_monthly_limit_times_each_target():
+    settings = {"limits": {"overall": 300000}, "targets": {"needs": 50, "wants": 30, "investing": 15, "savings": 5}}
+    assert budget.category_limits(settings) == {"needs": 150000, "wants": 90000, "investing": 45000, "savings": 15000}
+    settings["limits"]["overall"] = 99999  # $999.99: shares round down to the cent
+    assert budget.category_limits(settings)["savings"] == 4999
+
+
+def test_category_limits_are_off_without_a_limit_or_targets():
+    assert budget.category_limits({"limits": {"overall": 0}, "targets": TARGETS_45_30_20_5}) == {}
+    assert budget.category_limits({"limits": {"overall": 300000}, "targets": {}}) == {}
+    assert budget.category_limits(budget.empty_budget()["settings"]) == {}
+
+
+def test_plan_amounts_follow_whatever_is_typed():
+    assert budget.plan_amounts("$3,000", ["50", "30", "", "x"]) == {"needs": 150000, "wants": 90000}
+    assert budget.plan_amounts("", ["50", "30", "15", "5"]) == {}
+    assert budget.plan_amounts("abc", ["50", "30", "15", "5"]) == {}
+
+
+def test_donut_has_a_segment_per_category_with_money():
+    amounts = {"needs": 120000, "wants": 30000, "investing": 0, "savings": 50000}
+    ring = design.donut_svg(amounts, 200000)
+    assert ring.count("<circle") == 3 and "$2,000" in ring and "Needs $1,200 (60%)" in ring
+    empty = design.donut_svg(dict.fromkeys(amounts, 0), 0)
+    assert empty.count("<circle") == 1 and design.LINE in empty
+
+
 def test_savings_subcategory_is_set_aside_not_left_over():
     user_budget = make_budget()
     budget.add_item(user_budget, "2026-10", "emergency_fund", "Transfer", "300")
@@ -355,7 +410,7 @@ def test_savings_subcategory_is_set_aside_not_left_over():
     assert budget.leftover(user_budget, month) == 127950 - 30000
     assert budget.saved(user_budget, month) == 127950
     assert budget.savings_progress(user_budget) == 127950
-    meters = budget.target_meters(user_budget, budget.RULE_45_30_20_5, month)
+    meters = budget.target_meters(user_budget, TARGETS_45_30_20_5, month)
     assert meters["savings"]["actual_percent"] == 40
 
 
