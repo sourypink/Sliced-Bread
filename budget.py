@@ -19,7 +19,6 @@ PRESET_SUBCATEGORIES = (
 PRESET_KEYS = tuple(preset["key"] for preset in PRESET_SUBCATEGORIES)
 MAX_CUSTOM_SUBCATEGORIES = 8
 ALL_SPENDING = "All spending"  # History's unzoomed view
-TIERED_SECTION = "investments"  # its lines belong to a tier the user names, like "Retirement"
 UNSAFE_KEY_CHARACTERS = re.compile(r"[^a-z0-9]+")
 
 # Starting plans the user can pick at sign-up or from Goals, each with the research behind it.
@@ -97,22 +96,9 @@ def clean_name(text):
     return name
 
 
-def clean_tier(text):
-    """Trim an investment tier's name, or raise ValueError if it is unusable."""
-    tier = " ".join(str(text if text is not None else "").split())
-    if not tier:
-        raise ValueError("Enter a tier, like Retirement")
-    if len(tier) > MAX_NAME_LENGTH:
-        raise ValueError(f"Tier must be {MAX_NAME_LENGTH} characters or fewer")
-    return tier
-
-
-def make_item(section, name_text, amount_text, tier_text=None):
-    """A validated line. Investment lines also carry their tier."""
-    item = {"name": clean_name(name_text), "amount": parse_amount(amount_text)}
-    if section == TIERED_SECTION:
-        item["tier"] = clean_tier(tier_text)
-    return item
+def make_item(name_text, amount_text):
+    """A validated line."""
+    return {"name": clean_name(name_text), "amount": parse_amount(amount_text)}
 
 
 def format_money(cents):
@@ -287,19 +273,11 @@ def editable_month(budget, month_key):
     return month
 
 
-def same_tier_as_before(budget, item):
-    """Typing "retirement" files the line under an existing "Retirement" tier rather than a new one."""
-    if "tier" in item:
-        existing = {tier.lower(): tier for tier in tiers(budget)}
-        item["tier"] = existing.get(item["tier"].lower(), item["tier"])
-    return item
-
-
-def add_item(budget, month_key, section, name_text, amount_text, tier_text=None):
+def add_item(budget, month_key, section, name_text, amount_text):
     """Validate and add a line to a section; returns the added item."""
     if section not in section_keys(budget):
         raise ValueError(f"Unknown section: {section}")
-    item = same_tier_as_before(budget, make_item(section, name_text, amount_text, tier_text))
+    item = make_item(name_text, amount_text)
     editable_month(budget, month_key)[section].append(item)
     return item
 
@@ -312,23 +290,14 @@ def remove_item(budget, month_key, section, index):
     items.pop(index)
 
 
-def update_item(budget, month_key, section, index, name_text, amount_text, tier_text=None):
+def update_item(budget, month_key, section, index, name_text, amount_text):
     """Validate and replace one line; returns the new item."""
     items = editable_month(budget, month_key)[section]
     if not 0 <= index < len(items):
         raise IndexError(f"No line {index} in {section}")
-    item = same_tier_as_before(budget, make_item(section, name_text, amount_text, tier_text))
+    item = make_item(name_text, amount_text)
     items[index] = item
     return item
-
-
-def tiers(budget):
-    """Every investment tier used in any month, in the order they were first used."""
-    seen = {}
-    for key in sorted(budget["months"]):
-        for item in get_month(budget, key).get(TIERED_SECTION, []):
-            seen.setdefault(item["tier"], None)
-    return list(seen)
 
 
 # ---------- Percentage targets ----------
@@ -472,9 +441,9 @@ HISTORY_RANGES = {"6 months": 6, "12 months": 12}  # "All" is the third choice, 
 MAX_HISTORY_MONTHS = 24  # columns stay readable up to two years
 SAMPLE_TAG = " (sample)"
 
-# Five believable earlier months for demos, oldest first: (section, name, dollars), plus a tier for investments.
-SAMPLE_ROTH = ("investments", "Roth IRA", 250, "Retirement")
-SAMPLE_INDEX = ("investments", "Index fund", 150, "Brokerage")
+# Five believable earlier months for demos, oldest first: (section, name, dollars).
+SAMPLE_ROTH = ("investments", "Roth IRA", 250)
+SAMPLE_INDEX = ("investments", "Index fund", 150)
 SAMPLE_MONTHS = [
     [("income", "Salary", 3000), ("necessities", "Rent", 1200), ("necessities", "Groceries", 340),
      ("necessities", "Gas", 110), ("discretionary", "Streaming", 28), ("discretionary", "Dinner out", 90),
@@ -532,14 +501,9 @@ def months_with_data(budget):
     return sum(1 for month in budget["months"].values() if any(month.values()))
 
 
-def line_label(item):
-    """How a line is named in History: investment lines carry their tier, "Retirement: Index fund"."""
-    return f"{item['tier']}: {item['name']}" if "tier" in item else item["name"]
-
-
 def top_items(budget, keys, section, limit=5):
     """The biggest lines in a section across the given months: (name, month_key, cents), largest first."""
-    items = [(line_label(item), key, item["amount"]) for key in keys for item in get_month(budget, key)[section]]
+    items = [(item["name"], key, item["amount"]) for key in keys for item in get_month(budget, key)[section]]
     return sorted(items, key=lambda item: item[2], reverse=True)[:limit]
 
 
@@ -549,7 +513,7 @@ def section_lines(budget, keys, section):
     for key in keys:
         totals = months.setdefault(key, {})
         for item in get_month(budget, key)[section]:
-            label = line_label(item)
+            label = item["name"]
             totals[label] = totals.get(label, 0) + item["amount"]
     return months
 
@@ -561,9 +525,9 @@ def fill_sample_months(budget, current_key):
         key = shift_month(current_key, -steps)
         if any(get_month(budget, key).values()):
             continue
-        for section, name, dollars, *tier in lines:
+        for section, name, dollars in lines:
             if section not in section_keys(budget):  # a preset the user removed
                 continue
-            add_item(budget, key, section, name + SAMPLE_TAG, str(dollars), *tier)
+            add_item(budget, key, section, name + SAMPLE_TAG, str(dollars))
         filled += 1
     return filled
