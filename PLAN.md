@@ -10,8 +10,8 @@ Words, used the same way in code and on screen:
 
 - **Category**: one of four, fixed forever: **Needs**, **Wants**, **Investing**, **Savings**. Targets and the
   History chart are built on these, so history stays comparable whatever else changes.
-- **Subcategory**: Necessities (Needs), Discretionary and Travel (Wants), Investments (Investing), Emergency fund (Savings) to
-  start, plus up to 8 of the user's own. Each sits in exactly one category; from the Goals tab any of them can be
+- **Subcategory**: Necessities (Needs), Discretionary (Wants) and Investments (Investing) to start; Savings has none
+  until the user adds one (an emergency fund, say), plus up to 8 of the user's own. Each sits in exactly one category; from the Goals tab any of them can be
   renamed or moved, and the user's own can be removed once they hold no items. A small marker ("● Wants") on every card
   says which category it counts toward, and its dot is a shade of that category's colour.
 - **Item**: a line in a subcategory: Rent, Flights.
@@ -64,8 +64,10 @@ Accounts are local JSON files, not a real auth service: no email is ever sent.
 
 ```
 ┌──────────────────────────────────────────────┐
-│ $640 left to invest in October      Oct 2026▾│  ← hero: title states the answer
-│ ( donut )  ● Needs $1,710  ● Wants $250 ...  │  ← where the money went, a donut and its key
+│ ‹          October 2026                  ›   │
+│ Left to save  $640                           │  ← hero: the month is above, so the line doesn't repeat it
+│                  ( donut )                   │  ← where the money went, centred
+│     ● Needs $1,710  ● Wants $250 ...         │  ← its key underneath
 ├──────────────────────────────────────────────┤
 │ ● Income                          $3,200  [+]│
 │   Salary                          $3,000   × │
@@ -77,10 +79,10 @@ Accounts are local JSON files, not a real auth service: no email is ever sent.
 │   Gas                               $130   × │
 ├──────────────────────────────────────────────┤
 │ ● Discretionary                     $250  [+]│
-│ ● Travel                              $0  [+]│
-│   No trips yet. Add flights, hotels, food.   │  ← empty state, one line
+│ ● Investments                         $0  [+]│
+│   Nothing yet. Add a Roth IRA, index fund... │  ← empty state, one line
 ├──────────────────────────────────────────────┤
-│ ● Investments                        $640    │
+│ ● Savings                            $640    │
 │   Savings goal: $1,920 of $5,000             │
 │   ███████████░░░░░░░░░░░░░░░░░░              │
 └──────────────────────────────────────────────┘
@@ -103,7 +105,7 @@ hero says the same.
 
 ### Goals
 
-- **Your plan**: Monthly limit first, then the four categories' %. Needs and wants are limits; investing and
+- **Your plan**: Monthly limit, then the Savings goal, then the four categories' %; Save plan saves all of them. Needs and wants are limits; investing and
   savings are minimums. Typing three fills the fourth to make 100. A line under the boxes shows each % in dollars
   of the limit ("Needs $1,500 · Wants $900 ..."), and those are the Needs and Wants limits the hero's meters use.
   With targets off, the limit caps all spending.
@@ -120,7 +122,6 @@ hero says the same.
 - "Edit subcategories" opens a pop-up, grouped under each category's marker: rename and move with a category
   picker, saved together on Confirm (Cancel discards). ✕ removes any subcategory, presets included (tagged
   "Preset"), only when empty; it and the add row (name and the category it counts toward) save straight away.
-- Savings goal, in its own card.
 - Every amount box shows $ and commas as you type.
 
 ### Profile (avatar menu, then Edit profile)
