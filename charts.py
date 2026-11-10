@@ -221,6 +221,8 @@ def legend_html(view):
     return f'<div class="sb-legend">{items}</div>'
 
 
+# ---------- Tiles, table and biggest items ----------
+
 def stat_tiles_html(rows, view):
     """The range in numbers. Plain sans, proportional digits: these are standalone figures."""
     earned = sum(row["income"] for row in rows)

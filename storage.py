@@ -20,6 +20,8 @@ MAX_EMAIL_LENGTH = 254  # characters, the longest an address can be
 EMAIL_SHAPE = re.compile(r"[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}")
 
 
+# ---------- Names and saved files ----------
+
 def clean_name(text):
     """The name as it will be shown: trimmed, single spaces. Raises ValueError if unusable."""
     name = " ".join((text or "").split())
@@ -86,6 +88,8 @@ def new_password(password):
         raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
     return hash_password(password)
 
+
+# ---------- Accounts ----------
 
 def clean_email(text):
     """The account's email, trimmed and lowercased; also its file key. Raises ValueError if it can't be one."""

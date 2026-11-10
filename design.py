@@ -1,7 +1,8 @@
 """Pond, the Sliced Bread design system: tokens, the Gradio theme, the CSS and the mallard. See PLAN.md section 5.
 
-The one rule: green is the app's colour. It marks what you can press and spending that is on track.
-Amber means near a limit, red means over. Nothing in app.py sets a colour or size by hand.
+The one rule: green, amber and red only ever mean on track, near a target and over it (and green marks what you can
+press). No category is red, orange or green, so its colour never reads as good or bad news. Nothing in app.py sets a
+colour or size by hand.
 """
 
 import html
@@ -22,15 +23,19 @@ LINE = "#E2DDD3"  # card borders, dividers, empty meter track
 FIELD_BORDER = "#958D81"  # text box borders, 3.3:1 on white so a box reads as a box
 ACCENT = "#1F7A4D"  # mallard green: buttons, focus, on-track meters; white text on it is 5.3:1
 ACCENT_DARK = "#17603C"  # button hover
-ACCENT_SOFT = "#E7F1EA"  # add/edit panel, Investments card wash
+ACCENT_SOFT = "#E7F1EA"  # add/edit panel, avatar
 HOVER = "#F0EDE7"  # neutral hover for quiet icon buttons
 WARN = "#D99A00"  # meter 90-100% (fill only, never text)
 OVER = "#B42318"  # meter over 100%, "Over budget" text
 
-# Fills only (dots, bars, chart columns), never text. Checked with the dataviz palette validator:
-# all pairs pass lightness, chroma, colour-blind and normal-vision separation on white (2026-11-03).
-INCOME_COLOR = ACCENT
-CATEGORY_COLORS = {"needs": "#2A78D6", "wants": "#EB6834", "investing": "#6250D6", "savings": "#1BAF7A"}
+# Fills only (dots, bars, chart columns), never text. Blue, pink, violet and teal-blue: no red, orange or green, which
+# mean bad, warning and good in finance. Checked with the dataviz palette validator on white (2026-11-10): every pair
+# passes lightness, chroma, contrast and normal-vision separation; the closest colour-blind pair (pink and teal-blue,
+# 7.2) is in the floor band, legal because every colour also carries its name (marker, key, legend).
+INCOME_COLOR = "#5B6473"  # slate: money in is neither a category nor a status
+CATEGORY_COLORS = {"needs": "#1E5EC2", "wants": "#E0559F", "investing": "#A070F0", "savings": "#0E93A8"}
+SAVINGS_SOFT = "#E4F3F6"  # the Savings card's wash, a tint of its colour
+SAVINGS_EDGE = "#BFE2E9"  # its border
 # A category's subcategories run from a little darker than its colour to a little lighter, so the dot says the category.
 SUBCATEGORY_DARKEST_MIX = 0.2  # share of black in the first subcategory's shade (when there is more than one)
 SUBCATEGORY_LIGHTEST_MIX = 0.35  # share of white in the last
@@ -39,8 +44,8 @@ DARKEST_MIX = 0.35  # share of black in the biggest line's shade
 LIGHTEST_MIX = 0.6  # share of white in the smallest; any lighter fades into the white card
 ITEM_LIGHTEST_MIX = 0.4  # same, from a subcategory's colour, which may already be up to 35% white
 METER_COLORS = {"good": ACCENT, "warn": WARN, "over": OVER}
-# A spending limit's fill blends through these as it fills: (share of the limit spent, colour). Red at the limit.
-LIMIT_COLOR_STOPS = ((0.0, ACCENT), (budget.WARN_AT, WARN), (1.0, OVER))
+# A spending target's fill blends through these as it fills: (share of the target spent, colour). Red at the target.
+SPENDING_COLOR_STOPS = ((0.0, ACCENT), (budget.WARN_AT, WARN), (1.0, OVER))
 
 # The mallard's own colours. Duck only; never used for UI.
 DUCK_HEAD = "#1D6B47"
@@ -49,13 +54,15 @@ DUCK_BREAST = "#7A3E1D"
 DUCK_BODY = "#B9B3A8"
 
 # The hero donut, in px.
-DONUT_SIZE = 148
-DONUT_STROKE = 18  # ring thickness: thin, so the number in the middle leads
+DONUT_SIZE = 220
+DONUT_STROKE = 24  # ring thickness: thin for its size, so the number in the middle leads
 DONUT_GAP = 2  # card-coloured gap between segments
 
 FONT_TEXT = "Geist"
 FONT_DISPLAY = "Instrument Serif"
 PAGE_MAX_WIDTH = "640px"
+
+# ---------- Scripts the page runs ----------
 
 # Amount boxes (class sb-money-input) show "$1,234.56" as you type. The caret keeps its place among the digits, and
 # a fresh input event tells Gradio the new text; formatting twice changes nothing, so that event stops there.
@@ -100,6 +107,8 @@ HEAD = (
     "});</script>"
     + MONEY_INPUT_SCRIPT
 )
+
+# ---------- The Gradio theme ----------
 
 # Green and paper as Gradio colour ramps, so built-in components pick them up.
 ACCENT_RAMP = gr.themes.Color(
@@ -179,6 +188,8 @@ def build_theme():
     return theme
 
 
+# ---------- The CSS ----------
+
 CSS = f"""
 :root {{
   --sb-paper: {PAPER}; --sb-paper-deep: {PAPER_DEEP}; --sb-card: {CARD}; --sb-ink: {INK}; --sb-muted: {MUTED};
@@ -236,7 +247,7 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
   padding: 20px !important; gap: 14px !important; box-shadow: 0 1px 2px rgb(28 27 24 / 0.04), 0 4px 16px rgb(28 27 24 / 0.04);
 }}
 @media (min-width: 600px) {{ .sb-card {{ padding: 24px !important; }} }}
-.sb-card-accent {{ background: var(--sb-accent-soft) !important; border-color: #CFE3D6 !important; }}
+.sb-card-savings {{ background: {SAVINGS_SOFT} !important; border-color: {SAVINGS_EDGE} !important; }}
 .sb-row {{ align-items: center !important; gap: 8px !important; flex-wrap: nowrap !important; }}
 .sb-grow {{ flex: 1 1 auto !important; min-width: 0 !important; }}
 .sb-head {{ display: flex; justify-content: space-between; align-items: center; gap: 12px; }}
@@ -292,12 +303,10 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
 /* The plan chooser: each preset's shares, why, and the research behind it. */
 .sb-preset-split {{ font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; margin-top: 2px; }}
 .sb-source {{ font-size: 14px; color: var(--sb-muted); font-style: italic; margin-top: 4px; }}
-.sb-split-row {{ display: grid; gap: 8px; justify-items: start; }}
-.sb-split-row > .sb-meter-row {{ width: 100%; }}
 .sb-head .sb-title {{ flex-wrap: wrap; row-gap: 6px; min-width: 0; }}
 .sb-title-name {{ overflow-wrap: anywhere; }}
 
-/* Hero: the month, one big number, where the money went, and the duck. */
+/* Hero: the month, one big number, where the money went and the split against the plan, and the duck. */
 .sb-hero-top {{ align-items: center !important; flex-wrap: nowrap !important; }}
 .sb-month-label {{ font-size: 16px; font-weight: 600; text-align: center; }}
 /* Where the money went: the donut centred, its key in a centred row underneath. */
@@ -308,7 +317,7 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
 .sb-donut-middle {{
   position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
 }}
-.sb-donut-amount {{ font-family: var(--sb-serif); font-size: 26px; line-height: 1; font-variant-numeric: tabular-nums; }}
+.sb-donut-amount {{ font-family: var(--sb-serif); font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums; }}
 .sb-donut-label {{ font-size: 14px; color: var(--sb-muted); margin-top: 4px; }}
 .sb-key {{ display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px; color: var(--sb-muted); }}
 .sb-key span {{ display: inline-flex; align-items: center; gap: 6px; }}
@@ -335,7 +344,11 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
 .sb-meter {{ height: 6px; background: var(--sb-line); border-radius: 999px; overflow: hidden; }}
 .sb-meter > span {{ display: block; height: 100%; border-radius: 999px; }}
 .sb-meter-row {{ display: grid; gap: 6px; }}
-.sb-split {{ display: grid; gap: 16px; margin-top: 16px; }}
+/* The split: each category's marker and amount, then its meter against the plan's percent. */
+.sb-split {{ display: grid; gap: 16px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--sb-line); }}
+.sb-split-row {{ display: grid; gap: 8px; }}
+.sb-split-head {{ display: flex; justify-content: space-between; align-items: center; gap: 12px; }}
+.sb-split .sb-note {{ text-align: center; }}
 .sb-meter-label {{ font-size: 14px; display: flex; justify-content: space-between; gap: 8px; }}
 .sb-meter-label > span:first-child {{ color: var(--sb-muted); }}
 
@@ -609,10 +622,10 @@ def money(cents):
     return f'<span class="sb-money">{budget.format_money(cents)}</span>'
 
 
-def limit_color(fraction):
-    """A spending limit's fill: green when empty, shifting through amber to red at the limit."""
+def spending_color(fraction):
+    """A spending target's fill: green when empty, shifting through amber to red at the target."""
     fraction = min(max(fraction, 0.0), 1.0)
-    for (start, low), (end, high) in zip(LIMIT_COLOR_STOPS, LIMIT_COLOR_STOPS[1:]):
+    for (start, low), (end, high) in zip(SPENDING_COLOR_STOPS, SPENDING_COLOR_STOPS[1:]):
         if fraction <= end:
             share = (fraction - start) / (end - start)
             channels = (
@@ -623,25 +636,15 @@ def limit_color(fraction):
 
 
 def meter_html(result, label_left="", blend=False):
-    """A meter with its words; blend for spending limits, which redden as they fill. Empty when no limit is set."""
+    """A meter with its words; blend for spending targets, which redden as they fill. Empty when no target is set."""
     if result["state"] == "none":
         return ""
     width = max(result["fraction"] * 100, 2)
-    color = limit_color(result["fraction"]) if blend else METER_COLORS[result["state"]]
+    color = spending_color(result["fraction"]) if blend else METER_COLORS[result["state"]]
     return (
         f'<div class="sb-meter-row"><div class="sb-meter"><span style="width:{width:.1f}%;'
         f'background:{color}"></span></div>'
         f'<div class="sb-meter-label"><span>{html.escape(label_left)}</span><span>{html.escape(result["label"])}</span></div></div>'
-    )
-
-
-def progress_html(saved, goal):
-    """The savings goal bar: always green, it only fills."""
-    width = max(min(saved / goal, 1) * 100, 2)
-    return (
-        f'<div class="sb-meter-row"><div class="sb-meter"><span style="width:{width:.1f}%;background:{ACCENT}"></span></div>'
-        f'<div class="sb-meter-label"><span>Savings goal</span><span class="sb-money">'
-        f'{budget.format_money(saved)} of {budget.format_money(goal)}</span></div></div>'
     )
 
 
