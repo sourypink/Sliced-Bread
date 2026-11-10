@@ -28,12 +28,11 @@ Maps to the brief's feature list:
 | Income tracking | Income section, total at the top |
 | Expense tracking (amount, category, description) | Sections 2–4; the section *is* the category, the line name is the description |
 | Edit a line | ✎ on a line opens it in place; Save or Cancel |
-| Overall + per-category budgets | Goals tab: one monthly limit; each category's limit is that times its % |
+| Overall + per-category budgets | Goals tab: four percentages of income, one per category, that add up to 100. No dollar limit and no savings goal (removed 2026-11-10: they confused people and could contradict the %) |
 | Automatic calculations | `budget.py`; every add or delete recomputes |
-| Budget alerts | Limit meters under the hero shift from green through amber to red as they fill: near limit at 90%, over at 100% |
+| Budget alerts | Needs and Wants meters in the hero card shift from green through amber to red as they fill their share of income: near at 90%, over at 100%; a toast when one crosses |
 | Monthly summary | The hero line and a donut of where the money went at the top of the page; month picker |
 | Investing | Investments section: plain lines like any subcategory, counted toward Investing |
-| Savings goal | Savings card: progress toward the goal set on the Goals tab |
 | History over months | History tab: earned vs money out per month by category (6 / 12 months / All); click a category to see its subcategories, then a subcategory to see its items in shades of its colour; biggest items, a table of every number, and sample months for demos |
 | Percentage targets (50/30/20) | Goals tab sets the four categories' % (typing three fills the fourth to make 100), or picks one of three cited presets, offered once at sign-up; a split card under the hero compares actual vs target and alerts on overspend |
 | Own categories | Goals tab: add a subcategory and pick which of the four categories it counts toward; the presets can be removed too |
@@ -66,8 +65,12 @@ Accounts are local JSON files, not a real auth service: no email is ever sent.
 ┌──────────────────────────────────────────────┐
 │ ‹          October 2026                  ›   │
 │ Left to save  $640                           │  ← hero: the month is above, so the line doesn't repeat it
-│                  ( donut )                   │  ← where the money went, centred
-│     ● Needs $1,710  ● Wants $250 ...         │  ← its key underneath
+│                ( big donut )                 │  ← where the money went, centred, income in the middle
+│ Your 50/30/15/5 split                        │  ← same card: each category, its amount and a meter
+│ (Needs)                           $1,710     │
+│ ████████████████████░░  53% of income, plan 50%  Over by $80
+│ ...                                          │  ← targets off: the key and "Set your split on Goals"
+│ 🦆 Heads up: Needs is over by $80.            │
 ├──────────────────────────────────────────────┤
 │ ● Income                          $3,200  [+]│
 │   Salary                          $3,000   × │
@@ -83,14 +86,12 @@ Accounts are local JSON files, not a real auth service: no email is ever sent.
 │   Nothing yet. Add a Roth IRA, index fund... │  ← empty state, one line
 ├──────────────────────────────────────────────┤
 │ ● Savings                            $640    │
-│   Savings goal: $1,920 of $5,000             │
-│   ███████████░░░░░░░░░░░░░░░░░░              │
+│   $300 set aside, $340 left over.            │
 └──────────────────────────────────────────────┘
 ```
 
 **+** opens an inline row inside that section: `[Name] [Amount] [Add] [Done]`; the + hides while it's open. **×** deletes a line.
-If expenses exceed income, Investments reads **"Over budget by $85"** in the over-limit color and the
-hero says the same.
+If more goes out than came in, Savings reads **"Over budget by $85"** in the over colour and the hero says the same.
 
 ### History
 
@@ -105,13 +106,11 @@ hero says the same.
 
 ### Goals
 
-- **Your plan**: Monthly limit, then the Savings goal, then the four categories' %; Save plan saves all of them. Needs and wants are limits; investing and
-  savings are minimums. Typing three fills the fourth to make 100. A line under the boxes shows each % in dollars
-  of the limit ("Needs $1,500 · Wants $900 ..."), and those are the Needs and Wants limits the hero's meters use.
-  With targets off, the limit caps all spending.
-- **Choose a preset** opens "Pick a plan": three presets, each with the research behind it.
-  Picking one keeps the Monthly limit set on Goals.
-  A new account sees it once after its first sign-in; "Set my own" closes it for good.
+- **Your split**: the four categories' % of income; Save split saves them. Needs and Wants are targets to stay
+  under; Investing and Savings are minimums to reach. Typing three fills the fourth to make 100. All blank turns
+  the comparison off.
+- **Choose a preset** opens "Pick a split": three presets, each with the research behind it.
+  A new account sees it once after its first sign-in; "I'll set my own" closes it for good.
 
   | Preset | Needs/Wants/Investing/Savings | Basis |
   |---|---|---|
@@ -152,9 +151,7 @@ sliced-bread/
 ```json
 {
   "account": {"name": "Mark", "email": "mark@example.com", "salt": "(hex)", "password_hash": "(hex)"},
-  "settings": {"savings_goal": 500000,
-               "limits": {"overall": 300000},
-               "targets": {"needs": 50, "wants": 30, "investing": 15, "savings": 5},
+  "settings": {"targets": {"needs": 50, "wants": 30, "investing": 15, "savings": 5},
                "plan_chosen": true, "removed_presets": ["travel"],
                "subcategories": [{"key": "necessities", "name": "Necessities", "category": "needs"},
                                  {"key": "pets", "name": "Pets", "category": "wants"}]},
@@ -180,23 +177,15 @@ validation), loops (totals), functions, dicts/lists, file I/O (JSON), modules (`
 **Recommendation: GitHub is the single source of truth. Colab only pulls and runs.**
 
 1. Code lives in a GitHub repo. I write and test it here, push it, the team pulls.
-2. `run_in_colab.ipynb` has two cells:
-   ```python
-   # Cell 1 — get the latest code
-   !git clone https://github.com/<you>/sliced-bread.git 2>/dev/null || git -C sliced-bread pull
-   %cd sliced-bread
-   !pip -q install -r requirements.txt
-   ```
-   ```python
-   # Cell 2 — run it (prints a public *.gradio.live link)
-   !python app.py
-   ```
-3. Re-run both cells after any change. No copy-pasting between tools.
-4. Colab wipes files when the runtime resets. Optional third cell mounts Google Drive and points
-   `DATA_DIR` there so saved budgets survive.
-5. Teammates who prefer Colab + Gemini can still edit: open the file in GitHub's web editor (press `.`
-   on the repo page), commit, then re-run the Colab cells. Never edit only the Colab copy — it's lost
-   on reset.
+2. `Sliced_Bread.ipynb` is built from the `.py` files by `build_notebook.py`: every file split at its
+   `# ---------- Section ----------` lines into one cell each, under a heading and a one-line note. The professor
+   grades this notebook, so every line of code is in it; it never `git clone`s. (Replaced the two-cell clone
+   launcher on 2026-11-10.)
+3. Runtime > Run all writes the files, then "Run the app" starts it with a public link.
+4. **Optional** (last section): save budgets on Google Drive, run the tests, read the app's log, and
+   `build_notebook.py` itself. The Drive cell catches "mount failed" (sign-in pop-up closed or timed out) and says
+   what to do instead of showing a traceback.
+5. Never edit only the Colab copy: it's lost on reset. Change the `.py` file, rebuild, commit both.
 
 Repo visibility: public is simplest for Colab. A private repo needs each teammate to add a read-only
 GitHub token to Colab Secrets — doable, one extra step. **OWNER TO CONFIRM.**
@@ -211,10 +200,11 @@ inside `Sliced Bread` so the project has its own repo.
 
 Lives in `design.py`; nothing in `app.py` sets a colour or size by hand. Replaced "Toast" on 2026-11-03.
 
-### The one rule: green means go
+### The one rule: green, amber and red are status only
 
 Mallard green marks what you can press (buttons, "+ Add", focus) and spending that is on track. Amber means near a
-limit, red means over. Status never relies on colour alone: every meter carries words ("Near limit", "Over by $45").
+target, red means over. No category uses red, orange or green, so a category's colour never reads as good or bad
+news. Status never relies on colour alone: every meter carries words ("Near target", "Over by $45").
 
 ### Colour
 
@@ -233,10 +223,12 @@ limit, red means over. Status never relies on colour alone: every meter carries 
 | `warn` | `#D99A00` | Meter fill 90–100% |
 | `over` | `#B42318` | Meter fill over 100%, "Over budget" amount |
 
-Section dots, bars and chart columns (fills only): income and savings `accent`, investments `#6250D6`, necessities `#2A78D6`,
-discretionary `#EB6834`, travel `#1BAF7A`; unpicked categories in a zoomed chart `#D9D4CA`. Checked with the
-dataviz palette validator (all pairs pass, including colour-blind separation); the earlier blue and purple
-did not. The duck has its own colours and they are used nowhere else.
+Category dots, bars and chart columns (fills only): Needs `#1E5EC2` blue, Wants `#E0559F` pink, Investing
+`#A070F0` violet, Savings `#0E93A8` teal-blue; income `#5B6473` slate; subcategories are shades of their
+category's colour; unpicked categories in a zoomed chart `#D9D4CA`. Checked with the dataviz palette validator on
+2026-11-10: every pair passes lightness, chroma, contrast and normal-vision separation; the closest colour-blind
+pair (pink and teal-blue, 7.2) sits in the floor band, allowed because every colour also carries its name. The
+duck has its own colours and they are used nowhere else.
 
 ### Type
 
@@ -278,7 +270,7 @@ border and progress overlay are switched off. Keyboard focus keeps a thin 2 px g
 | 2. `storage.py` + tests | Create account, sign in, save/load a month round-trips |
 | 3. `design.py` | Theme + CSS render on a blank Blocks page |
 | 4. Budget tab | Five sections, add/delete, hero + bar, month picker |
-| 5. Goals tab + profile | Limits, savings goal, targets, subcategories; profile, password, sign out, delete my data |
+| 5. Goals tab + profile | Percentage targets, subcategories; profile, password, sign out, delete my data |
 | 6. Check | Tests pass; clicked through at 375 px and desktop; runs from a fresh Colab |
 
 Validation handled in step 1: empty names, non-numbers, negatives, zero, more than 2 decimals, absurd

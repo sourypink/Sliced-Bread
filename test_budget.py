@@ -31,12 +31,6 @@ def test_parse_amount_rejects_bad_input(typed, message):
         budget.parse_amount(typed)
 
 
-def test_optional_amount_treats_blank_and_zero_as_unset():
-    assert budget.parse_optional_amount("") == 0
-    assert budget.parse_optional_amount("0.00") == 0
-    assert budget.parse_optional_amount("1,800") == 180000
-
-
 def test_clean_name_trims_and_rejects_blank_or_long():
     assert budget.clean_name("  Rent   and  water ") == "Rent and water"
     with pytest.raises(ValueError, match="Enter a name"):
@@ -108,24 +102,17 @@ def test_add_item_rejects_unknown_section_and_bad_amount_without_changing_anythi
     assert user_budget["months"] == {}
 
 
-@pytest.mark.parametrize("spent, limit, state, label", [
+@pytest.mark.parametrize("spent, target, state, label", [
     (100, 0, "none", ""),
     (50000, 100000, "good", "$500 left"),
-    (90000, 100000, "warn", "Near limit, $100 left"),
-    (100000, 100000, "warn", "Near limit, $0 left"),
+    (90000, 100000, "warn", "Near target, $100 left"),
+    (100000, 100000, "warn", "Near target, $0 left"),
     (104500, 100000, "over", "Over by $45"),
 ])
-def test_meter_states(spent, limit, state, label):
-    result = budget.meter(spent, limit)
+def test_meter_states(spent, target, state, label):
+    result = budget.meter(spent, target)
     assert result["state"] == state and result["label"] == label
     assert 0 <= result["fraction"] <= 1
-
-
-def test_savings_progress_ignores_overspent_months():
-    user_budget = make_budget()
-    budget.add_item(user_budget, "2026-11", "income", "Job", "100")
-    budget.add_item(user_budget, "2026-11", "travel", "Trip", "500")
-    assert budget.savings_progress(user_budget) == 320000 - 192050
 
 
 @pytest.mark.parametrize("key, steps, result", [("2026-10", 1, "2026-11"), ("2026-12", 1, "2027-01"), ("2026-01", -1, "2025-12")])
@@ -188,7 +175,7 @@ def test_target_meters_compare_spending_to_share_of_income():
     assert meters["needs"]["actual_percent"] == 49 and meters["needs"]["state"] == "over"
     assert meters["needs"]["label"] == "Over by $140.50"
     assert meters["wants"]["actual_percent"] == 11 and meters["wants"]["label"] == "$620 left"
-    assert meters["investing"]["actual_percent"] == 0 and meters["investing"]["label"] == "$640 short"
+    assert meters["investing"]["actual_percent"] == 0 and meters["investing"]["label"] == "$640 to go"
     assert meters["savings"]["actual_percent"] == 40 and meters["savings"]["label"] == "On target"
 
 
@@ -201,8 +188,8 @@ def test_target_meters_flag_overspending_and_short_minimums():
     meters = budget.target_meters(user_budget, TARGETS_45_30_20_5, budget.get_month(user_budget, "2026-10"))
     assert meters["needs"]["label"] == "Over by $150"
     assert meters["wants"]["state"] == "warn"
-    assert meters["investing"]["state"] == "warn" and meters["investing"]["label"] == "$140 short"
-    assert meters["savings"]["state"] == "warn" and meters["savings"]["label"] == "$10 short"
+    assert meters["investing"]["state"] == "warn" and meters["investing"]["label"] == "$140 to go"
+    assert meters["savings"]["state"] == "warn" and meters["savings"]["label"] == "$10 to go"
 
 
 def test_target_meters_empty_without_targets_or_income():
@@ -225,7 +212,7 @@ def test_investing_comes_out_before_savings():
     budget.add_item(user_budget, "2026-10", "investments", "Roth IRA", "500")
     month = budget.get_month(user_budget, "2026-10")
     assert budget.total_invested(user_budget, month) == 50000
-    assert budget.total_expenses(user_budget, month) == 192050  # spending only, so limits ignore investing
+    assert budget.total_expenses(user_budget, month) == 192050  # spending only, so targets to stay under ignore investing
     assert budget.leftover(user_budget, month) == 320000 - 192050 - 50000
 
 
@@ -352,32 +339,13 @@ def test_removing_investments_leaves_sample_months_working():
     assert budget.month_history(user_budget, "2026-10", 1)[0]["invested"] == 0
 
 
-# ---------- budget.py: plan presets and the monthly limit ----------
+# ---------- budget.py: plan presets ----------
 
 def test_every_plan_preset_covers_all_four_categories_and_makes_100():
     for preset in budget.PLAN_PRESETS:
         assert set(preset["targets"]) == set(budget.CATEGORIES)
         assert sum(preset["targets"].values()) == budget.PERCENT_WHOLE
         assert budget.parse_targets(*(str(preset["targets"][category]) for category in budget.CATEGORIES)) == preset["targets"]
-
-
-def test_category_limits_are_the_monthly_limit_times_each_target():
-    settings = {"limits": {"overall": 300000}, "targets": {"needs": 50, "wants": 30, "investing": 15, "savings": 5}}
-    assert budget.category_limits(settings) == {"needs": 150000, "wants": 90000, "investing": 45000, "savings": 15000}
-    settings["limits"]["overall"] = 99999  # $999.99: shares round down to the cent
-    assert budget.category_limits(settings)["savings"] == 4999
-
-
-def test_category_limits_are_off_without_a_limit_or_targets():
-    assert budget.category_limits({"limits": {"overall": 0}, "targets": TARGETS_45_30_20_5}) == {}
-    assert budget.category_limits({"limits": {"overall": 300000}, "targets": {}}) == {}
-    assert budget.category_limits(budget.empty_budget()["settings"]) == {}
-
-
-def test_plan_amounts_follow_whatever_is_typed():
-    assert budget.plan_amounts("$3,000", ["50", "30", "", "x"]) == {"needs": 150000, "wants": 90000}
-    assert budget.plan_amounts("", ["50", "30", "15", "5"]) == {}
-    assert budget.plan_amounts("abc", ["50", "30", "15", "5"]) == {}
 
 
 def test_donut_has_a_segment_per_category_with_money():
@@ -394,7 +362,6 @@ def test_savings_subcategory_is_set_aside_not_left_over():
     month = budget.get_month(user_budget, "2026-10")
     assert budget.leftover(user_budget, month) == 127950 - 30000
     assert budget.saved(user_budget, month) == 127950
-    assert budget.savings_progress(user_budget) == 127950
     meters = budget.target_meters(user_budget, TARGETS_45_30_20_5, month)
     assert meters["savings"]["actual_percent"] == 40
 
@@ -529,7 +496,7 @@ def test_unusable_names_are_rejected(typed, message):
 
 def test_budget_round_trips_through_a_file():
     user_budget = make_budget()
-    user_budget["settings"]["savings_goal"] = 500000
+    user_budget["settings"]["targets"] = dict(TARGETS_45_30_20_5)
     storage.save_budget("mark@example.com", user_budget)
     assert storage.load_budget("mark@example.com") == user_budget
     assert not storage.account_exists("someone@example.com")
@@ -599,9 +566,9 @@ def test_rename_budget_refuses_a_taken_email(tmp_path):
     assert not storage.account_exists("mark@example.com") and storage.load_budget("marcus@example.com") == make_budget()
 
 
-def test_limit_meters_redden_as_they_fill():
-    assert design.limit_color(0) == design.ACCENT
-    assert design.limit_color(budget.WARN_AT) == design.WARN
-    assert design.limit_color(1.0) == design.limit_color(1.5) == design.OVER
-    halfway = design.limit_color(0.5)
+def test_spending_meters_redden_as_they_fill():
+    assert design.spending_color(0) == design.ACCENT
+    assert design.spending_color(budget.WARN_AT) == design.WARN
+    assert design.spending_color(1.0) == design.spending_color(1.5) == design.OVER
+    halfway = design.spending_color(0.5)
     assert halfway not in (design.ACCENT, design.WARN, design.OVER)

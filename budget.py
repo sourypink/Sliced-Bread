@@ -8,7 +8,7 @@ from datetime import date
 INCOME = "income"
 CATEGORIES = ("needs", "wants", "investing", "savings")
 CATEGORY_NAMES = {"needs": "Needs", "wants": "Wants", "investing": "Investing", "savings": "Savings"}
-SPENDING_CATEGORIES = ("needs", "wants")  # what limits and "spent" cover; investing and savings are minimums
+SPENDING_CATEGORIES = ("needs", "wants")  # targets to stay under, and what "spent" covers; investing and savings are minimums
 PRESET_SUBCATEGORIES = (
     {"key": "necessities", "name": "Necessities", "category": "needs"},
     {"key": "discretionary", "name": "Discretionary", "category": "wants"},
@@ -47,19 +47,18 @@ PLAN_PRESETS = (
 )
 PERCENT_WHOLE = 100
 
-WARN_AT = 0.9  # share of a limit at which the meter turns to "near limit"
+WARN_AT = 0.9  # share of a target at which its meter turns to "near limit"
 MAX_AMOUNT_CENTS = 10_000_000 * 100  # $10M; anything larger is a typo
 MAX_NAME_LENGTH = 40  # characters
 CENTS_PER_DOLLAR = 100
 
 
 def empty_budget():
-    """A new user's budget: no limit, no goal, no months."""
-    return {
-        "settings": {"savings_goal": 0, "limits": {"overall": 0}, "targets": {}},
-        "months": {},
-    }
+    """A new user's budget: no targets, no months."""
+    return {"settings": {"targets": {}}, "months": {}}
 
+
+# ---------- Checking what the user typed ----------
 
 def parse_amount(text):
     """Turn what the user typed into cents, or raise ValueError saying what is wrong."""
@@ -79,14 +78,6 @@ def parse_amount(text):
     if cents > MAX_AMOUNT_CENTS:
         raise ValueError("Amount is too large")
     return cents
-
-
-def parse_optional_amount(text):
-    """Like parse_amount, but blank or 0 means "not set" and returns 0."""
-    cleaned = str(text if text is not None else "").strip().replace("$", "").replace(",", "")
-    if cleaned.strip("0.") == "":
-        return 0
-    return parse_amount(cleaned)
 
 
 def clean_name(text):
@@ -227,7 +218,7 @@ def category_total(budget, month, category):
 
 
 def total_expenses(budget, month):
-    """Needs + wants: what limits and "spent" cover."""
+    """Needs + wants: what "spent" covers."""
     return sum(category_total(budget, month, category) for category in SPENDING_CATEGORIES)
 
 
@@ -251,21 +242,16 @@ def saved(budget, month):
     return total_set_aside(budget, month) + max(leftover(budget, month), 0)
 
 
-def meter(spent, limit):
-    """State of a spending limit: none (no limit set), good, warn or over, with its label."""
-    if limit <= 0:
+def meter(spent, target):
+    """State of a target to stay under: none (not set), good, warn or over, with its label."""
+    if target <= 0:
         return {"state": "none", "fraction": 0.0, "label": ""}
-    fraction = spent / limit
-    if spent > limit:
-        return {"state": "over", "fraction": 1.0, "label": f"Over by {format_money(spent - limit)}"}
+    fraction = spent / target
+    if spent > target:
+        return {"state": "over", "fraction": 1.0, "label": f"Over by {format_money(spent - target)}"}
     if fraction >= WARN_AT:
-        return {"state": "warn", "fraction": fraction, "label": f"Near limit, {format_money(limit - spent)} left"}
-    return {"state": "good", "fraction": fraction, "label": f"{format_money(limit - spent)} left"}
-
-
-def savings_progress(budget):
-    """Saved so far, every month added up."""
-    return sum(saved(budget, get_month(budget, key)) for key in budget["months"])
+        return {"state": "warn", "fraction": fraction, "label": f"Near target, {format_money(target - spent)} left"}
+    return {"state": "good", "fraction": fraction, "label": f"{format_money(target - spent)} left"}
 
 
 # ---------- Lines ----------
@@ -329,7 +315,7 @@ def parse_targets(needs_text, wants_text, investing_text, savings_text):
             raise ValueError(f"{CATEGORY_NAMES[key]} must be a whole number from 0 to 100")
     total = sum(targets.values())
     if total != PERCENT_WHOLE:
-        raise ValueError(f"Targets must add up to 100% (now {total}%)")
+        raise ValueError(f"Your split must add up to 100% (now {total}%)")
     return targets
 
 
@@ -363,32 +349,13 @@ def share_of(cents, percent):
     return cents * percent // PERCENT_WHOLE
 
 
-def plan_amounts(limit_text, percent_texts):
-    """While typing on Goals: each category's dollars for every valid %. Empty until a limit is typed."""
-    try:
-        limit = parse_optional_amount(limit_text)
-    except ValueError:
-        return {}
-    percents = {category: target_number(text) for category, text in zip(CATEGORIES, percent_texts)}
-    return {category: share_of(limit, percent) for category, percent in percents.items() if limit and percent is not None}
-
-
-def category_limits(settings):
-    """Each category's dollar share of the monthly limit by its target %. Empty unless both are set."""
-    overall = settings["limits"].get("overall", 0)
-    targets = settings.get("targets", {})
-    if overall <= 0 or set(targets) != set(CATEGORIES):
-        return {}
-    return {category: share_of(overall, targets[category]) for category in CATEGORIES}
-
-
 def minimum_meter(reached, goal):
     """A target to reach rather than stay under: short is amber, reaching it is good."""
     if goal <= 0:
         return {"state": "none", "fraction": 0.0, "label": ""}
     if reached >= goal:
         return {"state": "good", "fraction": 1.0, "label": "On target"}
-    return {"state": "warn", "fraction": reached / goal, "label": f"{format_money(goal - reached)} short"}
+    return {"state": "warn", "fraction": reached / goal, "label": f"{format_money(goal - reached)} to go"}
 
 
 def target_meters(budget, targets, month):
@@ -401,7 +368,7 @@ def target_meters(budget, targets, month):
     reached["savings"] = saved(budget, month)
     meters = {}
     for category in CATEGORIES:
-        goal = income * targets[category] // PERCENT_WHOLE
+        goal = share_of(income, targets[category])
         check = meter if category in SPENDING_CATEGORIES else minimum_meter
         meters[category] = {
             **check(reached[category], goal),
@@ -410,6 +377,8 @@ def target_meters(budget, targets, month):
         }
     return meters
 
+
+# ---------- Months ----------
 
 def get_month(budget, month_key):
     """The month's data with every section present, or an empty month if nothing was entered yet."""

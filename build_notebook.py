@@ -1,32 +1,94 @@
-"""Build Sliced_Bread.ipynb: every source file as a visible Colab cell. Run after changing any .py file."""
+"""Build Sliced_Bread.ipynb: every source file, split into its sections, one Colab cell each. Run after changing any .py file."""
 
 import json
+import re
 
 NOTEBOOK = "Sliced_Bread.ipynb"
 PREVIEW_HEIGHT = 900  # px, the app's frame inside the notebook
+SECTION_MARKER = re.compile(r"^[ \t]*# ---------- (.+) ----------\n", re.MULTILINE)
+PREAMBLE = "Imports and settings"  # the title of the part of a file before its first marker
 
-# (file, what it is), in the order a reader should meet them.
-SOURCE_FILES = [
-    ("budget.py", "The math: categories and subcategories, totals, what is left, limit and target alerts, input checks. No Gradio here."),
-    ("storage.py", "Saves each account's budget as a JSON file named by its email, with a salted hash of its password."),
-    ("design.py", "Pond, the design system: colours, type, spacing, the Gradio theme, the CSS and the mallard mascot."),
-    ("charts.py", "The History tab's chart, tiles and table: categories, then a subcategory, then its items. Plain HTML."),
-    ("app.py", "The Gradio screens: log in and create account, the Budget, History and Goals tabs, and the profile page. The only file that uses Gradio."),
-    ("test_budget.py", "Automated tests for budget.py and storage.py."),
+# The numbered parts of the notebook, in the order a reader should meet them: (file, heading, what it is).
+PARTS = [
+    ("budget.py", "Calculations", "All the money math: categories and subcategories, totals, what is left, percentage targets and history. No screens here, so it can be tested on its own."),
+    ("storage.py", "Saving accounts", "Each account is one JSON file named by its email, with a salted hash of its password instead of the password."),
+    ("design.py", "Design", "Pond, the design system: colours, type, spacing, the Gradio theme, the CSS and the mallard mascot."),
+    ("charts.py", "Charts", "The History tab's chart, tiles and table, built as plain HTML from the numbers in budget.py."),
+    ("app.py", "App screens", "The Gradio screens: log in, the Budget, History and Goals tabs, pop-ups and the profile page. The only file that uses Gradio."),
 ]
+TESTS = ("test_budget.py", "Automated tests for budget.py and storage.py, grouped like the code they check.")
+BUILDER = "build_notebook.py"
+
+# One line under each section's heading, by (file, section title). Every section needs one: the build stops if it's missing.
+NOTES = {
+    ("budget.py", PREAMBLE): "The four fixed categories, the starting subcategories, the three research-backed plans, and the limits on what can be typed.",
+    ("budget.py", "Checking what the user typed"): "Turn typed amounts into whole cents and names into clean text, or raise a ValueError that says what is wrong.",
+    ("budget.py", "Subcategories"): "Add, rename, move and remove subcategories. Each keeps a fixed key so past months stay attached.",
+    ("budget.py", "Totals"): "Sums per section and category, what is left of income, and what was saved.",
+    ("budget.py", "Lines"): "Add, edit and delete one line in a month.",
+    ("budget.py", "Percentage targets"): "The four shares of income that must add up to 100, the box that fills itself in, and how each category compares.",
+    ("budget.py", "Months"): "Month keys like 2026-10, moving between months, and their names.",
+    ("budget.py", "History"): "One row of totals per month for the History tab, and sample months for demos.",
+    ("storage.py", PREAMBLE): "Where files go (set SLICED_BREAD_DATA to change it) and the rules for names, emails and passwords.",
+    ("storage.py", "Names and saved files"): "Clean a person's name, and load, save, rename and delete their budget file.",
+    ("storage.py", "Passwords"): "Salted PBKDF2 hashes, compared in constant time.",
+    ("storage.py", "Accounts"): "Check an email, create an account, and log in.",
+    ("design.py", PREAMBLE): "What this file is and what it imports.",
+    ("design.py", "Tokens"): "Every colour, size and font the app uses, with why. Category colours avoid red, orange and green.",
+    ("design.py", "Scripts the page runs"): "Small browser scripts: $ and commas as you type, and clicks on the History chart.",
+    ("design.py", "The Gradio theme"): "Gradio's built-in theme, set to the tokens above.",
+    ("design.py", "The CSS"): "Cards, buttons, meters, the donut and the pop-ups.",
+    ("design.py", "The mallard"): "The duck mascot as SVG: a detailed one for sign-in and a simple mark for the header.",
+    ("design.py", "HTML pieces (escape everything the user typed)"): "Reusable bits of HTML: the donut, category markers, meters and lines.",
+    ("charts.py", PREAMBLE): "Chart settings: tick steps, label spacing, and how many items to name.",
+    ("charts.py", "What a zoom level shows"): "Which pieces the chart stacks when you zoom from categories into a subcategory and its items.",
+    ("charts.py", "The chart"): "The column chart itself: earned beside money out for each month, with tooltips and a legend.",
+    ("charts.py", "Tiles, table and biggest items"): "The four totals above the chart, the table of every number, and the biggest lines.",
+    ("app.py", PREAMBLE): "Imports, placeholder text, and helpers every handler uses to save a change or show an error.",
+    ("app.py", "Page pieces"): "The HTML for the duck's line, the hero card (big number, donut and split), each section and the Savings card.",
+    ("app.py", "Event handlers: lines"): "What happens when you add, edit or delete a line.",
+    ("app.py", "Event handlers: subcategories"): "What happens when you add, rename, move or remove a subcategory.",
+    ("app.py", "Event handlers: goals"): "Saving your split, picking a preset plan, and filling in the fourth box.",
+    ("app.py", "Event handlers: history"): "Redrawing the History tab for a range or zoom, and filling sample months.",
+    ("app.py", "Event handlers: account"): "Log in, create an account, sign out, edit the profile, change the password, delete my data.",
+    ("app.py", "Layout: log in"): "The screen's state, then the log-in and create-account card.",
+    ("app.py", "Layout: header and Budget tab"): "The header with the avatar menu, and the Budget tab: hero card, every section, and Savings.",
+    ("app.py", "Layout: History tab"): "Range pills, sample-month offer, tiles, chart and biggest items.",
+    ("app.py", "Layout: Goals tab"): "Your split (four percentages) and the button that opens the subcategory editor.",
+    ("app.py", "Layout: pop-ups"): "The subcategory editor and the plan chooser.",
+    ("app.py", "Layout: profile page"): "Name and email, password change, and delete my data.",
+    ("app.py", "Wiring"): "Connects every button and box to its handler, and starts the app when run as a program.",
+    ("test_budget.py", PREAMBLE): "Imports and a sample budget the tests share.",
+    ("test_budget.py", "budget.py: input validation"): "Bad amounts and names are refused with a clear message.",
+    ("test_budget.py", "budget.py: calculations"): "Totals, what is left, meters and months.",
+    ("test_budget.py", "budget.py: editing a line"): "Editing and deleting lines.",
+    ("test_budget.py", "budget.py: percentage targets"): "The four shares must add up to 100, and the fourth box fills itself in.",
+    ("test_budget.py", "budget.py: investments and savings"): "Investing is not spending, and savings include what is left over.",
+    ("test_budget.py", "budget.py: subcategories"): "Adding, renaming, moving and removing subcategories without losing lines.",
+    ("test_budget.py", "budget.py: plan presets"): "Every preset makes 100, and the donut draws what it is given.",
+    ("test_budget.py", "budget.py: history"): "Month rows, ranges, biggest items and sample months.",
+    ("test_budget.py", "storage.py"): "Saving, accounts, passwords and emails.",
+}
 
 INTRO = """# Sliced Bread: a personal budget tracker
 
-Add your income and spending; the app shows how much is left to invest each month, warns you near and over
-your limits, compares your split with a research-backed plan, and tracks a savings goal.
+Add your income and spending; the app shows how much is left to save each month, splits it into Needs, Wants,
+Investing and Savings, and compares that split with a plan you choose (like 50/30/15/5).
 
-**To run it:** Runtime > Run all. The app opens at the bottom of this notebook, and a public `gradio.live`
-link is printed above it (best for the class demo). If a button shows an error, run the last cell and share
-what it prints.
+**To run it:** Runtime > Run all. The app opens under section 7, with a public `gradio.live` link above it.
 
-Every source file is below as its own cell. Each cell starts with `%%writefile`, which saves the cell as
-that `.py` file so the files can import each other. This notebook is generated from the files in
-[github.com/sourypink/Sliced-Bread](https://github.com/sourypink/Sliced-Bread) by `build_notebook.py`."""
+**How the code is laid out:** each source file is split into its sections, one cell each. The first cell of a
+file starts with `%%writefile`, which saves the cell as that `.py` file; the rest start with `%%writefile -a`,
+which adds to it. That way the files can import each other and the tests can run, while every line is here to read.
+
+1. Setup
+2. Calculations (`budget.py`)
+3. Saving accounts (`storage.py`)
+4. Design (`design.py`)
+5. Charts (`charts.py`)
+6. App screens (`app.py`)
+7. Run the app
+8. Optional: keep budgets on Google Drive, run the tests, read the app's log, how this notebook is made"""
 
 # The app runs in its own Python process, not inside this notebook's: a fresh process always uses the packages
 # the install cell just put on disk, even if this notebook loaded older ones earlier. Its output goes to app.log.
@@ -60,6 +122,25 @@ try:
 except ImportError:
     print("Not in Colab: open the local or public URL above.")"""
 
+DRIVE = """# Save budgets to Google Drive so they survive a runtime reset. Then run section 7 again.
+import os
+
+DRIVE_FOLDER = "/content/drive/MyDrive/sliced-bread-data"
+
+try:
+    from google.colab import drive
+    drive.mount("/content/drive")
+except ImportError:
+    print("Not in Colab: budgets are saved in the data folder next to app.py.")
+except ValueError as error:
+    # Colab raises "mount failed" when the Drive sign-in pop-up is closed, refused or times out.
+    print(f"Drive didn't connect ({error}).")
+    print("Run this cell again and allow access in the pop-up, using the same Google account as Colab.")
+    print("Until then, budgets last only for this session.")
+else:
+    os.environ["SLICED_BREAD_DATA"] = DRIVE_FOLDER
+    print(f"Budgets now save to {DRIVE_FOLDER}. Run section 7 again to restart the app with it.")"""
+
 LOG = """# If a button shows an error, run this and send the output: it is the app's own log.
 !tail -n 60 app.log"""
 
@@ -72,29 +153,66 @@ def code(text):
     return {"cell_type": "code", "execution_count": None, "metadata": {}, "outputs": [], "source": text.splitlines(keepends=True)}
 
 
+def sections(file_name):
+    """A file as (title, text) pieces, split at its section markers. Joined back together they are the file."""
+    with open(file_name, encoding="utf-8") as file:
+        source = file.read()
+    starts = [match.start() for match in SECTION_MARKER.finditer(source)]
+    titles = [PREAMBLE] + SECTION_MARKER.findall(source)
+    bounds = [0] + starts + [len(source)]
+    return [(title, source[start:end]) for title, start, end in zip(titles, bounds, bounds[1:]) if source[start:end].strip()]
+
+
+def file_cells(file_name, number=None):
+    """Markdown and code cells for every section of a file; the code cells write it back out piece by piece."""
+    cells = []
+    for index, (title, text) in enumerate(sections(file_name)):
+        if (file_name, title) not in NOTES:
+            raise KeyError(f'Add a line for "{title}" in {file_name} to NOTES in {BUILDER}')
+        heading = f"{number}.{index + 1} {title}" if number else title
+        cells.append(markdown(f"### {heading}\n\n{NOTES[file_name, title]}"))
+        # The piece exactly as it is in the file, blank lines included, so the written file matches GitHub's.
+        cells.append(code(f"%%writefile {'-a ' if index else ''}{file_name}\n{text}"))
+    return cells
+
+
 def build():
     with open("requirements.txt", encoding="utf-8") as file:
         packages = " ".join(line.strip() for line in file if line.strip())
-    cells = [markdown(INTRO), code(f"# Install the exact versions the app was tested with.\n!pip -q install {packages}")]
-    for file_name, description in SOURCE_FILES:
-        with open(file_name, encoding="utf-8") as file:
-            source = file.read()
-        cells.append(markdown(f"## `{file_name}`\n\n{description}"))
-        cells.append(code(f"%%writefile {file_name}\n{source}"))
-    cells.append(markdown("## Run the tests\n\nEvery line should pass."))
-    cells.append(code("!python -m pytest -q test_budget.py"))
-    cells.append(markdown("## Run the app"))
-    cells.append(code(RUN))
-    cells.append(code(LOG))
+    cells = [
+        markdown(INTRO),
+        markdown("## 1. Setup\n\nInstall the exact package versions the app was tested with."),
+        code(f"!pip -q install {packages}"),
+    ]
+    for number, (file_name, heading, description) in enumerate(PARTS, start=2):
+        cells.append(markdown(f"## {number}. {heading} (`{file_name}`)\n\n{description}"))
+        cells.extend(file_cells(file_name, number))
+    cells += [
+        markdown(f"## {len(PARTS) + 2}. Run the app"),
+        code(RUN),
+        markdown(f"## {len(PARTS) + 3}. Optional\n\nNone of these are needed to use the app. Each cell works on its own."),
+        markdown("### Keep budgets on Google Drive\n\nColab forgets files when the runtime resets. Run this to save "
+                 "budgets in your Drive instead, then run section 7 again."),
+        code(DRIVE),
+        markdown(f"### Run the tests\n\n{TESTS[1]} Write the test file, then run it: every test should pass."),
+        *file_cells(TESTS[0]),
+        code(f"!python -m pytest -q {TESTS[0]}"),
+        markdown("### Read the app's log\n\nIf a button shows an error, this prints what the app wrote while running."),
+        code(LOG),
+        markdown(f"### How this notebook is made\n\nThis notebook is generated from the files in "
+                 f"[github.com/sourypink/Sliced-Bread](https://github.com/sourypink/Sliced-Bread) by `{BUILDER}`, below. "
+                 "Running this cell only saves it; it changes nothing here."),
+        code(f"%%writefile {BUILDER}\n" + open(BUILDER, encoding="utf-8").read().rstrip() + "\n"),
+    ]
     notebook = {
         "cells": cells,
-        "metadata": {"colab": {"provenance": []}, "kernelspec": {"display_name": "Python 3", "name": "python3"}, "language_info": {"name": "python"}},
+        "metadata": {"colab": {"provenance": [], "toc_visible": True}, "kernelspec": {"display_name": "Python 3", "name": "python3"}, "language_info": {"name": "python"}},
         "nbformat": 4,
         "nbformat_minor": 0,
     }
     with open(NOTEBOOK, "w", encoding="utf-8", newline="\n") as file:
         json.dump(notebook, file, indent=1, ensure_ascii=False)
-    print(f"Wrote {NOTEBOOK} with {len(SOURCE_FILES)} source files")
+    print(f"Wrote {NOTEBOOK} with {sum(cell['cell_type'] == 'code' for cell in cells)} code cells")
 
 
 if __name__ == "__main__":

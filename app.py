@@ -22,7 +22,6 @@ CUSTOM_EMPTY_STATE = "Nothing yet."
 NAME_PLACEHOLDERS = {
     "income": "Salary", "necessities": "Rent", "discretionary": "Concert tickets", "investments": "Roth IRA",
 }
-MONTHLY_LIMIT = "Monthly limit"
 CATEGORY_PICKER_WIDTH = 124  # px: fits "Investing" and the dropdown arrow
 CATEGORY_OPTIONS = [(budget.CATEGORY_NAMES[category], category) for category in budget.CATEGORIES]
 RANGE_CHOICES = ["6 months", "12 months", "All"]
@@ -58,23 +57,6 @@ def sections(user_budget):
     ]
 
 
-def limit_meters(user_budget, month):
-    """Each limit's (meter, words) by the name alerts give it: Needs and Wants as their share of the monthly limit,
-    or the monthly limit on all spending while targets are off."""
-    settings = user_budget["settings"]
-    shares = budget.category_limits(settings)
-    if shares:
-        meters = {}
-        for category in budget.SPENDING_CATEGORIES:
-            name, spent = budget.CATEGORY_NAMES[category], budget.category_total(user_budget, month, category)
-            words = f"{name} {budget.format_money(spent)} of {budget.format_money(shares[category])}"
-            meters[f"{name} limit"] = (budget.meter(spent, shares[category]), words)
-        return meters
-    overall = settings["limits"].get("overall", 0)
-    spent = budget.total_expenses(user_budget, month)
-    return {MONTHLY_LIMIT: (budget.meter(spent, overall), f"Spent {budget.format_money(spent)} of {budget.format_money(overall)}")}
-
-
 # ---------- Page pieces ----------
 
 def month_title_html(key):
@@ -93,22 +75,22 @@ def duck_line(user_budget, key):
     """What the duck says under the hero: one line picked from the month's state. The mascot's only job for now."""
     month = budget.get_month(user_budget, key)
     if budget.section_total(month, budget.INCOME) == 0:
-        return "Add your income and I'll do the math."
+        return "Add your income below and I'll do the math."
     left = budget.leftover(user_budget, month)
     if left < 0:
         return "Quack. More went out than came in this month."
     meters = watched_meters(user_budget, key)
     for label, result in meters.items():
         if result["state"] == "over":
-            return f"Heads up: {label.lower()} is {result['label'].lower()}."
+            return f"Heads up: {label} is {result['label'].lower()}."
     for label, result in meters.items():
         if result["state"] == "warn":
-            return f"Careful, {label.lower()} is near its limit."
+            return f"Careful, {label} is close to your plan."
     return f"Nice. {budget.format_money(budget.saved(user_budget, month))} saved this month."
 
 
 def hero_html(user_budget, key):
-    """The big number, where the money went by category, and the duck."""
+    """The big number, then where the money went (the donut and each category against the plan), then the duck."""
     month = budget.get_month(user_budget, key)
     income = budget.section_total(month, budget.INCOME)
     left = budget.leftover(user_budget, month)
@@ -120,20 +102,35 @@ def hero_html(user_budget, key):
 
     amounts = {category: budget.category_total(user_budget, month, category) for category in budget.CATEGORIES}
     amounts["savings"] = budget.saved(user_budget, month)
-    key_items = "".join(
-        f"<span>{design.dot(design.CATEGORY_COLORS[category])}{budget.CATEGORY_NAMES[category]} {design.money(cents)}</span>"
-        for category, cents in amounts.items() if cents
-    )
-    meters = "".join(design.meter_html(result, words, blend=True) for result, words in limit_meters(user_budget, month).values())
     duck = (
         f'<div class="sb-duck-says"><span class="sb-bob">{design.duck_mark(44)}</span>'
         f'<div class="sb-bubble">{escape(duck_line(user_budget, key))}</div></div>'
     )
-    return (
-        f'{top}<div class="sb-donut-row">{design.donut_svg(amounts, income)}<div class="sb-key">{key_items}</div></div>'
-        + (f'<div class="sb-split">{meters}</div>' if meters else "")
-        + duck
+    return f'{top}<div class="sb-donut-row">{design.donut_svg(amounts, income)}</div>{split_html(user_budget, month, amounts)}{duck}'
+
+
+def split_html(user_budget, month, amounts):
+    """Under the donut: each category's amount and share of income against the plan, or a key and how to compare."""
+    targets = user_budget["settings"].get("targets", {})
+    meters = budget.target_meters(user_budget, targets, month)
+    if meters:
+        plan = "/".join(str(targets[category]) for category in budget.CATEGORIES)
+        rows = "".join(
+            f'<div class="sb-split-row"><div class="sb-split-head">{design.marker(category)}{design.money(amounts[category])}</div>'
+            f'{design.meter_html(result, f"{result['actual_percent']}% of income, plan {result['target_percent']}%", blend=category in budget.SPENDING_CATEGORIES)}</div>'
+            for category, result in meters.items()
+        )
+        return f'<div class="sb-split"><div class="sb-eyebrow">Your {plan} split</div>{rows}</div>'
+    key_items = "".join(
+        f"<span>{design.dot(design.CATEGORY_COLORS[category])}{budget.CATEGORY_NAMES[category]} {design.money(cents)}</span>"
+        for category, cents in amounts.items() if cents
     )
+    if targets:
+        hint = "Add income to compare this month with your split."
+    else:
+        hint = "Set your split on the Goals tab to see how this month compares."
+    key_row = f'<div class="sb-key">{key_items}</div>' if key_items else ""
+    return f'<div class="sb-split">{key_row}<div class="sb-note">{hint}</div></div>'
 
 
 def section_head_html(user_budget, month, section, name, category):
@@ -148,7 +145,7 @@ def section_head_html(user_budget, month, section, name, category):
 
 
 def savings_html(user_budget, key):
-    """The Savings category: what was set aside on purpose plus what is left over, and the savings goal."""
+    """The Savings category: what was set aside on purpose plus what is left over."""
     month = budget.get_month(user_budget, key)
     left = budget.leftover(user_budget, month)
     set_aside = budget.total_set_aside(user_budget, month)
@@ -160,44 +157,22 @@ def savings_html(user_budget, key):
         note = f'<div class="sb-note">{budget.format_money(set_aside)} set aside, {budget.format_money(left)} left over.</div>'
     else:
         note = '<div class="sb-note">Whatever is left after spending and investing lands here.</div>'
-    goal = user_budget["settings"]["savings_goal"]
-    if goal:
-        progress = design.progress_html(budget.savings_progress(user_budget), goal)
-    else:
-        progress = '<div class="sb-note">Set a savings goal on the Goals tab.</div>'
-    return f'{head}{amount}<div style="margin-top:6px">{note}</div><div style="margin-top:16px">{progress}</div>'
-
-
-def split_html(user_budget, month):
-    """Each category against the user's percentage targets, under the same marker as its sections. Empty when off."""
-    targets = user_budget["settings"].get("targets", {})
-    meters = budget.target_meters(user_budget, targets, month)
-    if not meters:
-        return ""
-    plan = "/".join(str(targets[category]) for category in budget.CATEGORIES)
-    rows = "".join(
-        f'<div class="sb-split-row">{design.marker(category)}'
-        f'{design.meter_html(result, f"{result["actual_percent"]}% of {result["target_percent"]}%", blend=category in budget.SPENDING_CATEGORIES)}</div>'
-        for category, result in meters.items()
-    )
-    return f'<div class="sb-title">Your {plan} split</div><div class="sb-split">{rows}</div>'
+    return f'{head}{amount}<div style="margin-top:6px">{note}</div>'
 
 
 def watched_meters(user_budget, key):
-    """Every limit and target an alert watches, by the name the alert shows."""
+    """Every target an alert watches, by its category's name."""
     month = budget.get_month(user_budget, key)
-    meters = {label: result for label, (result, _) in limit_meters(user_budget, month).items()}
     targets = budget.target_meters(user_budget, user_budget["settings"].get("targets", {}), month)
-    # Only needs and wants are limits; investing and savings are minimums, so they never alert.
-    meters.update({
-        f"{budget.CATEGORY_NAMES[category]} target": result
+    # Only needs and wants are targets to stay under; investing and savings are minimums, so they never alert.
+    return {
+        budget.CATEGORY_NAMES[category]: result
         for category, result in targets.items() if category in budget.SPENDING_CATEGORIES
-    })
-    return meters
+    }
 
 
 def budget_alerts(before, after, key):
-    """Warn when a change pushes a limit or target into "near" or "over"."""
+    """Warn when a change pushes a target into "near" or "over"."""
     old = watched_meters(before, key)
     for label, new in watched_meters(after, key).items():
         if new["state"] in ("warn", "over") and new["state"] != old.get(label, {"state": "none"})["state"]:
@@ -262,7 +237,7 @@ def add_subcategory(user, user_budget, name, category):
 # ---------- Event handlers: goals ----------
 
 def dollars_text(cents):
-    """Pre-fill for an amount box: "$1,800", or blank when not set."""
+    """Pre-fill for an amount box: "$1,800", or blank when zero."""
     return budget.format_money(cents) if cents else ""
 
 
@@ -277,56 +252,38 @@ def target_texts(targets):
     return [str(targets[category]) if complete else "" for category in budget.CATEGORIES]
 
 
-def parse_field(label, text):
-    try:
-        return budget.parse_optional_amount(text)
-    except ValueError as error:
-        raise ValueError(f"{label}: {error}")
-
-
-def plan_line_html(limit_text, *percent_texts):
-    """Under the Goals boxes: what each typed % comes to in dollars of the monthly limit."""
-    amounts = budget.plan_amounts(limit_text, percent_texts)
-    parts = [f"{budget.CATEGORY_NAMES[category]} {budget.format_money(cents)}" for category, cents in amounts.items()]
-    return f'<div class="sb-note">{" · ".join(parts)}</div>' if parts else ""
-
-
-def set_plan(updated, limit_text, targets):
-    """Store the monthly limit and the targets, and remember a plan was chosen so sign-in stops offering presets."""
-    # A fresh dict, so the Needs and Wants limits from before they followed the targets don't linger.
-    updated["settings"]["limits"] = {"overall": parse_field(MONTHLY_LIMIT, limit_text)}
+def set_plan(updated, targets):
+    """Store the targets, and remember a plan was chosen so sign-in stops offering presets."""
     updated["settings"]["targets"] = targets
     updated["settings"]["plan_chosen"] = True
 
 
 def plan_outputs(updated):
-    """What a saved plan refreshes: the budget, the Goals limit and % boxes, and the auto-filled box (none now)."""
-    settings = updated["settings"]
-    return updated, dollars_text(settings["limits"]["overall"]), *target_texts(settings["targets"]), None
+    """What a saved plan refreshes: the budget, the four % boxes, and the auto-filled box (none now)."""
+    return updated, *target_texts(updated["settings"]["targets"]), None
 
 
-def save_plan(user, user_budget, limit_text, goal_text, needs, wants, investing, savings):
-    """Save plan: the monthly limit, the savings goal and the four targets together."""
-    def apply(updated):
-        set_plan(updated, limit_text, budget.parse_targets(needs, wants, investing, savings))
-        updated["settings"]["savings_goal"] = parse_field("Savings goal", goal_text)
-    updated = changed(user, user_budget, apply)
-    gr.Info("Plan saved" if updated["settings"]["targets"] else "Plan saved, targets off", title="Saved")
+def save_plan(user, user_budget, needs, wants, investing, savings):
+    """Save split: the four targets together. All blank turns them off."""
+    updated = changed(user, user_budget, lambda changing: set_plan(changing, budget.parse_targets(needs, wants, investing, savings)))
+    gr.Info("Split saved" if updated["settings"]["targets"] else "Split cleared", title="Saved")
     return plan_outputs(updated)
 
 
 def make_use_preset(preset):
-    """The chooser's "Use this": save the preset's targets with the Goals tab's monthly limit, and close."""
-    def use(user, user_budget, limit_text):
-        updated = changed(user, user_budget, set_plan, limit_text, dict(preset["targets"]))
-        gr.Info(f"{preset['name']} plan saved", title="Saved")
+    """The chooser's "Use this": save the preset's targets and close."""
+    def use(user, user_budget):
+        updated = changed(user, user_budget, set_plan, dict(preset["targets"]))
+        gr.Info(f"{preset['name']} split saved", title="Saved")
         return *plan_outputs(updated), gr.update(visible=False)
     return use
 
 
-def set_own_plan(user, user_budget, limit_text):
-    """The chooser's "Set my own": keep the Goals tab's monthly limit and the current targets, and close."""
-    updated = changed(user, user_budget, lambda changing: set_plan(changing, limit_text, changing["settings"]["targets"]))
+def set_own_plan(user, user_budget):
+    """The chooser's "I'll set my own": keep the current targets and close."""
+    updated = changed(user, user_budget, lambda changing: set_plan(changing, changing["settings"]["targets"]))
+    if not updated["settings"]["targets"]:
+        gr.Info("Set your split any time on the Goals tab.", title="No split yet")
     return *plan_outputs(updated), gr.update(visible=False)
 
 
@@ -389,13 +346,11 @@ def fill_samples(user, user_budget):
 def signed_in(key, user_budget):
     """Show the Budget tab for a freshly logged-in account, with Goals filled from its settings."""
     settings = user_budget["settings"]
-    limit = dollars_text(settings["limits"].get("overall", 0))
     # Offered once: a new account picks a plan or sets its own, and either way it isn't asked again.
     ask_for_plan = not settings.get("plan_chosen") and not settings.get("targets")
     return (
         key, user_budget, budget.month_key(), None,
         gr.update(visible=False), gr.update(visible=True), gr.Tabs(selected="budget", visible=True),
-        limit, dollars_text(settings["savings_goal"]),
         *target_texts(settings.get("targets", {})),
         "", "", "", gr.update(visible=ask_for_plan),
     )
@@ -475,7 +430,7 @@ def delete_data(user):
     return (*sign_out(), gr.update(visible=False))
 
 
-# ---------- Layout ----------
+# ---------- Layout: log in ----------
 
 with gr.Blocks(title="Sliced Bread") as demo:
     user_state = gr.State(None)  # file key of the logged-in account: its email, "mark@example.com"
@@ -510,6 +465,8 @@ with gr.Blocks(title="Sliced Bread") as demo:
             signup_button = gr.Button("Create account", variant="primary", elem_classes="sb-full")
             to_login_button = gr.Button("Have an account? Log in", elem_classes="sb-link-button")
 
+    # ---------- Layout: header and Budget tab ----------
+
     with gr.Column(visible=False, elem_classes="sb-app") as app_view:
         # Header: logo left; the person's name and an avatar that opens a small menu, right.
         with gr.Row(elem_classes="sb-header"):
@@ -522,7 +479,7 @@ with gr.Blocks(title="Sliced Bread") as demo:
 
         with gr.Tabs() as app_tabs:
             with gr.Tab("Budget", id="budget"):
-                # The hero card: month switcher on top, then the big number, the bar and the duck.
+                # The hero card: month switcher on top, then the big number, the donut with the split, and the duck.
                 with gr.Column(elem_classes="sb-card"):
                     with gr.Row(elem_classes="sb-hero-top"):
                         previous_month = gr.Button("‹", elem_classes="sb-icon sb-nav", min_width=0, scale=0)
@@ -540,10 +497,6 @@ with gr.Blocks(title="Sliced Bread") as demo:
                         return
                     month = budget.get_month(user_budget, key)
                     opened = tuple(open_section) if open_section else None
-                    split = split_html(user_budget, month)
-                    if split:
-                        with gr.Column(elem_classes="sb-card"):
-                            html(split)
 
                     for section, section_name, category in sections(user_budget):
                         is_open = opened == ("add", section)
@@ -593,8 +546,10 @@ with gr.Blocks(title="Sliced Bread") as demo:
                                     remove = gr.Button("✕", elem_classes="sb-icon", min_width=0, scale=0)
                                     remove.click(make_remove(section, index), inputs=[user_state, budget_state, month_state, open_state], outputs=[budget_state, open_state])
 
-                    with gr.Column(elem_classes="sb-card sb-card-accent"):
+                    with gr.Column(elem_classes="sb-card sb-card-savings"):
                         html(savings_html(user_budget, key))
+
+            # ---------- Layout: History tab ----------
 
             with gr.Tab("History", id="history"):
                 range_pick = gr.Radio(RANGE_CHOICES, value=RANGE_CHOICES[0], show_label=False, container=False, elem_classes="sb-pills")
@@ -612,29 +567,41 @@ with gr.Blocks(title="Sliced Bread") as demo:
                 with gr.Column(elem_classes="sb-card", visible=False) as items_card:
                     history_items = html("")
 
+            # ---------- Layout: Goals tab ----------
+
             with gr.Tab("Goals", id="goals"):
-                # The monthly limit times each % is that category's limit (Needs, Wants) or goal (Investing, Savings).
+                # Each % is that category's share of income: Needs and Wants to stay under, Investing and Savings to reach.
                 with gr.Column(elem_classes="sb-card"):
-                    html('<div class="sb-title">Your plan</div>')
-                    limit_overall = money_box(MONTHLY_LIMIT, placeholder="No limit")
-                    savings_goal = money_box("Savings goal", placeholder="No goal")
+                    html(
+                        '<div class="sb-title">Your split</div>'
+                        '<div class="sb-note">The share of your income for each category. Type three and the fourth fills in to make 100%.</div>'
+                    )
                     with gr.Row():
-                        target_needs = gr.Textbox(label="Needs %", placeholder="Off", min_width=0)
-                        target_wants = gr.Textbox(label="Wants %", placeholder="Off", min_width=0)
+                        target_needs = gr.Textbox(label="Needs %", placeholder="%", min_width=0)
+                        target_wants = gr.Textbox(label="Wants %", placeholder="%", min_width=0)
                     with gr.Row():
-                        target_investing = gr.Textbox(label="Investing %", placeholder="Off", min_width=0)
-                        target_savings = gr.Textbox(label="Savings %", placeholder="Off", min_width=0)
-                    plan_line = html("")
+                        target_investing = gr.Textbox(label="Investing %", placeholder="%", min_width=0)
+                        target_savings = gr.Textbox(label="Savings %", placeholder="%", min_width=0)
                     with gr.Row():
                         choose_preset_button = gr.Button("Choose a preset")
-                        save_plan_button = gr.Button("Save plan", variant="primary")
+                        save_plan_button = gr.Button("Save split", variant="primary")
+                with gr.Column(elem_classes="sb-card"):
+                    html(
+                        '<div class="sb-title">Subcategories</div>'
+                        '<div class="sb-note">The groups your lines go in, like Rent under Necessities. Add your own, like Pets.</div>'
+                    )
                     edit_subs_button = gr.Button("Edit subcategories")
+
+        # ---------- Layout: pop-ups ----------
 
         # The subcategory editor: a pop-up over the page from Goals' "Edit subcategories". Renames and moves wait for
         # Confirm; ✕ and Add subcategory save straight away.
         with gr.Column(visible=False, elem_classes="sb-modal") as subs_modal:
             with gr.Column(elem_classes="sb-card sb-modal-card"):
-                html('<div class="sb-title">Subcategories</div>')
+                html(
+                    '<div class="sb-title">Subcategories</div><div class="sb-note">Renames and moves save when you press Confirm. '
+                    '✕ removes a subcategory right away, and only when it has no lines.</div>'
+                )
 
                 @gr.render(inputs=[budget_state, subs_open_state], triggers=[budget_state.change, subs_open_state.change])
                 def render_subcategories(user_budget, subs_open):
@@ -669,13 +636,18 @@ with gr.Blocks(title="Sliced Bread") as demo:
         # The plan chooser: offered once after a new account's first sign-in, then from Goals' "Choose a preset".
         with gr.Column(visible=False, elem_classes="sb-modal") as plan_modal:
             with gr.Column(elem_classes="sb-card sb-modal-card"):
-                html('<div class="sb-title">Pick a plan</div><div class="sb-note">You can change any number later on Goals.</div>')
+                html(
+                    '<div class="sb-title">Pick a split</div><div class="sb-note">A split is how you divide your income between '
+                    'Needs, Wants, Investing and Savings. Start from one of these and change it any time on Goals.</div>'
+                )
                 preset_buttons = []
                 for preset in budget.PLAN_PRESETS:
                     with gr.Column(elem_classes="sb-panel"):
                         html(preset_html(preset))
                         preset_buttons.append((preset, gr.Button("Use this", variant="primary")))
-                set_own_button = gr.Button("Set my own")
+                set_own_button = gr.Button("I'll set my own")
+
+        # ---------- Layout: profile page ----------
 
         # Opened from the avatar menu's "Edit profile" in place of the tabs. Not a tab: Gradio 6.31 folds a fourth tab
         # into a "more" menu even when it fits.
@@ -710,7 +682,7 @@ with gr.Blocks(title="Sliced Bread") as demo:
     target_boxes = [target_needs, target_wants, target_investing, target_savings]
     session_outputs = [user_state, budget_state, month_state, open_state, auth_view, app_view]
     signed_in_outputs = session_outputs + [
-        app_tabs, limit_overall, savings_goal, *target_boxes, login_password, signup_password, signup_confirm, plan_modal,
+        app_tabs, *target_boxes, login_password, signup_password, signup_confirm, plan_modal,
     ]
     signed_out_outputs = session_outputs + [login_panel, signup_panel, menu_state, person_menu, profile_view]
 
@@ -737,14 +709,12 @@ with gr.Blocks(title="Sliced Bread") as demo:
             make_complete(target), inputs=[*target_boxes, auto_target_state], outputs=[*others, auto_target_state],
             trigger_mode="always_last", show_progress="hidden",
         )
-    for box in (limit_overall, *target_boxes):
-        box.change(plan_line_html, inputs=[limit_overall, *target_boxes], outputs=plan_line, trigger_mode="always_last", show_progress="hidden")
-    plan_saved_outputs = [budget_state, limit_overall, *target_boxes, auto_target_state]
-    save_plan_button.click(save_plan, inputs=[user_state, budget_state, limit_overall, savings_goal, *target_boxes], outputs=plan_saved_outputs)
+    plan_saved_outputs = [budget_state, *target_boxes, auto_target_state]
+    save_plan_button.click(save_plan, inputs=[user_state, budget_state, *target_boxes], outputs=plan_saved_outputs)
     choose_preset_button.click(lambda: gr.update(visible=True), outputs=plan_modal)
     for preset, button in preset_buttons:
-        button.click(make_use_preset(preset), inputs=[user_state, budget_state, limit_overall], outputs=plan_saved_outputs + [plan_modal])
-    set_own_button.click(set_own_plan, inputs=[user_state, budget_state, limit_overall], outputs=plan_saved_outputs + [plan_modal])
+        button.click(make_use_preset(preset), inputs=[user_state, budget_state], outputs=plan_saved_outputs + [plan_modal])
+    set_own_button.click(set_own_plan, inputs=[user_state, budget_state], outputs=plan_saved_outputs + [plan_modal])
     edit_subs_button.click(lambda: True, outputs=subs_open_state)
     subs_open_state.change(lambda subs_open: gr.update(visible=subs_open), inputs=subs_open_state, outputs=subs_modal)
 
