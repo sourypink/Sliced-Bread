@@ -25,14 +25,11 @@ savings goal, so a plan can't contradict itself. Category colours are grey (Need
 After a push, open the link again rather than re-running a Colab tab you already had open: that tab keeps the
 old copy. If Colab still shows old code, use Runtime > Disconnect and delete runtime first.
 
-The notebook holds every line of every source file, split into its sections with a heading and one line on
-what each does, so it is also the copy to hand in. It needs no `git clone`. Its last section, **Optional**,
-holds what you can skip: saving budgets on Google Drive, the tests, the app's log, and the script that builds
-the notebook.
+The notebook holds every line of the app's source files, split into their sections with a heading and one line
+on what each does, so it is also the copy to hand in. It needs no `git clone`. The tests and the notebook builder
+live only in this repo.
 
-Colab forgets files when the runtime resets, so saved budgets last only for that session unless you run the
-Optional Google Drive cell (then run "Run the app" again). If it prints "Drive didn't connect", the sign-in
-pop-up was closed or timed out: run it again and allow access with the same Google account as Colab.
+Colab forgets files when the runtime resets, so saved budgets last only for that session.
 
 **Workflow:** the `.py` files in this repo are the source. After changing one, run
 `python build_notebook.py` to rebuild `Sliced_Bread.ipynb`, then commit both. A file's sections are its
@@ -65,7 +62,7 @@ python -m pytest
 | `design.py` | "Pond", the design system: colours, type, spacing, the Gradio theme, CSS and the mallard mascot. |
 | `test_budget.py` | Tests for `budget.py` and `storage.py`. |
 | `build_notebook.py` | Rebuilds `Sliced_Bread.ipynb` from the files above, one cell per section. |
-| `Sliced_Bread.ipynb` | The Colab notebook: all the code, the running app, and the Optional section. |
+| `Sliced_Bread.ipynb` | The Colab notebook: all the app's code and the running app. |
 | `Sliced Bread.pptx` | The presentation. |
 | `PLAN.md` | The plan: features, screens, design system, timeline and roles. |
 
