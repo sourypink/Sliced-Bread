@@ -110,14 +110,14 @@ def hero_html(user_budget, key):
 
 
 def split_html(user_budget, month, amounts):
-    """Under the donut: each category's amount and share of income against the plan, or a key and how to compare."""
+    """Under the donut: each category's amount and share of income against the plan, or just a key."""
     targets = user_budget["settings"].get("targets", {})
     meters = budget.target_meters(user_budget, targets, month)
     if meters:
         plan = "/".join(str(targets[category]) for category in budget.CATEGORIES)
         rows = "".join(
             f'<div class="sb-split-row"><div class="sb-split-head">{design.marker(category)}{design.money(amounts[category])}</div>'
-            f'{design.meter_html(result, f"{result['actual_percent']}% of income, plan {result['target_percent']}%", blend=category in budget.SPENDING_CATEGORIES)}</div>'
+            f'{design.meter_html(result, f"{result['actual_percent']}% of income, plan {result['target_percent']}%")}</div>'
             for category, result in meters.items()
         )
         return f'<div class="sb-split"><div class="sb-eyebrow">Your {plan} split</div>{rows}</div>'
@@ -125,12 +125,7 @@ def split_html(user_budget, month, amounts):
         f"<span>{design.dot(design.CATEGORY_COLORS[category])}{budget.CATEGORY_NAMES[category]} {design.money(cents)}</span>"
         for category, cents in amounts.items() if cents
     )
-    if targets:
-        hint = "Add income to compare this month with your split."
-    else:
-        hint = "Set your split on the Goals tab to see how this month compares."
-    key_row = f'<div class="sb-key">{key_items}</div>' if key_items else ""
-    return f'<div class="sb-split">{key_row}<div class="sb-note">{hint}</div></div>'
+    return f'<div class="sb-split"><div class="sb-key">{key_items}</div></div>' if key_items else ""
 
 
 def section_head_html(user_budget, month, section, name, category):

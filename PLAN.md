@@ -30,10 +30,10 @@ Maps to the brief's feature list:
 | Edit a line | ✎ on a line opens it in place; Save or Cancel |
 | Overall + per-category budgets | Goals tab: four percentages of income, one per category, that add up to 100. No dollar limit and no savings goal (removed 2026-11-10: they confused people and could contradict the %) |
 | Automatic calculations | `budget.py`; every add or delete recomputes |
-| Budget alerts | Needs and Wants meters in the hero card shift from green through amber to red as they fill their share of income: near at 90%, over at 100%; a toast when one crosses |
+| Budget alerts | Needs and Wants meters in the hero card fill in black against their share of income, with words for near (90%) and over (100%); a toast when one crosses |
 | Monthly summary | The hero line and a donut of where the money went at the top of the page; month picker |
 | Investing | Investments section: plain lines like any subcategory, counted toward Investing |
-| History over months | History tab: earned vs money out per month by category (6 / 12 months / All); click a category to see its subcategories, then a subcategory to see its items in shades of its colour; biggest items, a table of every number, and sample months for demos |
+| History over months | History tab: income vs money out per month by category (6 / 12 months / All); click a category to see its subcategories, then a subcategory to see its items in shades of its colour; biggest items, a table of every number, and sample months for demos |
 | Percentage targets (50/30/20) | Goals tab sets the four categories' % (typing three fills the fourth to make 100), or picks one of three cited presets, offered once at sign-up; a split card under the hero compares actual vs target and alerts on overspend |
 | Own categories | Goals tab: add a subcategory and pick which of the four categories it counts toward; the presets can be removed too |
 | Accounts | Create an account (name, email, password) and log in with email and password (salted hash); the avatar menu has Edit profile (name, email, password, delete my data) and Sign out |
@@ -96,8 +96,8 @@ If more goes out than came in, Savings reads **"Over budget by $85"** in the ove
 ### History
 
 - Range pills: 6 months, 12 months, All.
-- Four tiles for the range: earned, spent, invested, saved. When zoomed: the total, monthly average, share of income.
-- Column chart per month: earned beside money out, stacked by the four categories. Click a colour (or its legend
+- Four tiles for the range: income, spent, invested, saved. When zoomed: the total, monthly average, share of income.
+- Column chart per month: income beside money out, stacked by the four categories. Click a colour (or its legend
   entry) to zoom: a category splits into its subcategories (Savings adds "Left over"), and a subcategory splits
   into its biggest items, darkest at the bottom, in shades of its colour. A back link climbs one level.
 - Biggest items in the zoomed view, and "See the numbers" opens a table with every value.
@@ -200,11 +200,10 @@ inside `Sliced Bread` so the project has its own repo.
 
 Lives in `design.py`; nothing in `app.py` sets a colour or size by hand. Replaced "Toast" on 2026-11-03.
 
-### The one rule: green, amber and red are status only
+### Status is words, not colour
 
-Mallard green marks what you can press (buttons, "+ Add", focus) and spending that is on track. Amber means near a
-target, red means over. No category uses red, orange or green, so a category's colour never reads as good or bad
-news. Status never relies on colour alone: every meter carries words ("Near target", "Over by $45").
+Mallard green marks what you can press (buttons, "+ Add", focus); red marks an "Over budget" amount. Meters fill
+in plain ink and carry words ("Near target", "Over by $45").
 
 ### Colour
 
@@ -217,17 +216,14 @@ news. Status never relies on colour alone: every meter carries words ("Near targ
 | `muted` | `#6B665D` | Labels (5:1 on paper) |
 | `line` | `#E2DDD3` | Card borders, dividers, empty meter track |
 | `field-border` | `#958D81` | Text box borders (3.3:1 on white) |
-| `accent` | `#1F7A4D` | Buttons, focus, on-track meters (white text on it: 5.3:1) |
+| `accent` | `#1F7A4D` | Buttons, focus (white text on it: 5.3:1) |
 | `accent-dark` | `#17603C` | Button hover |
 | `accent-soft` | `#E7F1EA` | Add/edit panel, Savings card |
-| `warn` | `#D99A00` | Meter fill 90–100% |
-| `over` | `#B42318` | Meter fill over 100%, "Over budget" amount |
+| `over` | `#B42318` | "Over budget" amount |
 
-Category dots, bars and chart columns (fills only): Needs `#1E5EC2` blue, Wants `#E0559F` pink, Investing
-`#A070F0` violet, Savings `#0E93A8` teal-blue; income `#5B6473` slate; subcategories are shades of their
-category's colour; unpicked categories in a zoomed chart `#D9D4CA`. Checked with the dataviz palette validator on
-2026-11-10: every pair passes lightness, chroma, contrast and normal-vision separation; the closest colour-blind
-pair (pink and teal-blue, 7.2) sits in the floor band, allowed because every colour also carries its name. The
+Category dots, bars and chart columns (fills only): Needs `#8A8F98` grey, Wants `#FB4F14` Bengals orange,
+Investing `#A070F0` purple, Savings `#E0559F` pink; income `#F2C230` yellow; subcategories are shades of their
+category's colour. Every colour also carries its name (marker, key, legend). The
 duck has its own colours and they are used nowhere else.
 
 ### Type

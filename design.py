@@ -1,8 +1,7 @@
 """Pond, the Sliced Bread design system: tokens, the Gradio theme, the CSS and the mallard. See PLAN.md section 5.
 
-The one rule: green, amber and red only ever mean on track, near a target and over it (and green marks what you can
-press). No category is red, orange or green, so its colour never reads as good or bad news. Nothing in app.py sets a
-colour or size by hand.
+Green marks what you can press; red means over budget. Meters fill in plain ink, and their words say near or over.
+Nothing in app.py sets a colour or size by hand.
 """
 
 import html
@@ -21,21 +20,22 @@ INK = "#1C1B18"  # all text, all money
 MUTED = "#6B665D"  # labels, 5:1 on paper
 LINE = "#E2DDD3"  # card borders, dividers, empty meter track
 FIELD_BORDER = "#958D81"  # text box borders, 3.3:1 on white so a box reads as a box
-ACCENT = "#1F7A4D"  # mallard green: buttons, focus, on-track meters; white text on it is 5.3:1
+ACCENT = "#1F7A4D"  # mallard green: buttons, focus; white text on it is 5.3:1
 ACCENT_DARK = "#17603C"  # button hover
 ACCENT_SOFT = "#E7F1EA"  # add/edit panel, avatar
 HOVER = "#F0EDE7"  # neutral hover for quiet icon buttons
-WARN = "#D99A00"  # meter 90-100% (fill only, never text)
-OVER = "#B42318"  # meter over 100%, "Over budget" text
+OVER = "#B42318"  # "Over budget" text
 
-# Fills only (dots, bars, chart columns), never text. Blue, pink, violet and teal-blue: no red, orange or green, which
-# mean bad, warning and good in finance. Checked with the dataviz palette validator on white (2026-11-10): every pair
-# passes lightness, chroma, contrast and normal-vision separation; the closest colour-blind pair (pink and teal-blue,
-# 7.2) is in the floor band, legal because every colour also carries its name (marker, key, legend).
-INCOME_COLOR = "#5B6473"  # slate: money in is neither a category nor a status
-CATEGORY_COLORS = {"needs": "#1E5EC2", "wants": "#E0559F", "investing": "#A070F0", "savings": "#0E93A8"}
-SAVINGS_SOFT = "#E4F3F6"  # the Savings card's wash, a tint of its colour
-SAVINGS_EDGE = "#BFE2E9"  # its border
+# Fills only (dots, donut, chart columns), never text. Every colour also carries its name (marker, key, legend).
+INCOME_COLOR = "#F2C230"  # yellow
+CATEGORY_COLORS = {
+    "needs": "#8A8F98",  # grey: Necessities
+    "wants": "#FB4F14",  # Bengals orange: Discretionary
+    "investing": "#A070F0",  # purple
+    "savings": "#E0559F",  # pink
+}
+SAVINGS_SOFT = "#FCEAF3"  # the Savings card's wash, a tint of its colour
+SAVINGS_EDGE = "#F5C6DE"  # its border
 # A category's subcategories run from a little darker than its colour to a little lighter, so the dot says the category.
 SUBCATEGORY_DARKEST_MIX = 0.2  # share of black in the first subcategory's shade (when there is more than one)
 SUBCATEGORY_LIGHTEST_MIX = 0.35  # share of white in the last
@@ -43,9 +43,6 @@ SUBCATEGORY_LIGHTEST_MIX = 0.35  # share of white in the last
 DARKEST_MIX = 0.35  # share of black in the biggest line's shade
 LIGHTEST_MIX = 0.6  # share of white in the smallest; any lighter fades into the white card
 ITEM_LIGHTEST_MIX = 0.4  # same, from a subcategory's colour, which may already be up to 35% white
-METER_COLORS = {"good": ACCENT, "warn": WARN, "over": OVER}
-# A spending target's fill blends through these as it fills: (share of the target spent, colour). Red at the target.
-SPENDING_COLOR_STOPS = ((0.0, ACCENT), (budget.WARN_AT, WARN), (1.0, OVER))
 
 # The mallard's own colours. Duck only; never used for UI.
 DUCK_HEAD = "#1D6B47"
@@ -348,7 +345,6 @@ textarea:focus-visible, input:focus-visible {{ outline: none !important; }}
 .sb-split {{ display: grid; gap: 16px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--sb-line); }}
 .sb-split-row {{ display: grid; gap: 8px; }}
 .sb-split-head {{ display: flex; justify-content: space-between; align-items: center; gap: 12px; }}
-.sb-split .sb-note {{ text-align: center; }}
 .sb-meter-label {{ font-size: 14px; display: flex; justify-content: space-between; gap: 8px; }}
 .sb-meter-label > span:first-child {{ color: var(--sb-muted); }}
 
@@ -622,28 +618,14 @@ def money(cents):
     return f'<span class="sb-money">{budget.format_money(cents)}</span>'
 
 
-def spending_color(fraction):
-    """A spending target's fill: green when empty, shifting through amber to red at the target."""
-    fraction = min(max(fraction, 0.0), 1.0)
-    for (start, low), (end, high) in zip(SPENDING_COLOR_STOPS, SPENDING_COLOR_STOPS[1:]):
-        if fraction <= end:
-            share = (fraction - start) / (end - start)
-            channels = (
-                round(int(low[i:i + 2], 16) + (int(high[i:i + 2], 16) - int(low[i:i + 2], 16)) * share) for i in (1, 3, 5)
-            )
-            return "#" + "".join(f"{channel:02X}" for channel in channels)
-    return OVER
-
-
-def meter_html(result, label_left="", blend=False):
-    """A meter with its words; blend for spending targets, which redden as they fill. Empty when no target is set."""
+def meter_html(result, label_left=""):
+    """A meter in plain ink with its words. Empty when no target is set."""
     if result["state"] == "none":
         return ""
     width = max(result["fraction"] * 100, 2)
-    color = spending_color(result["fraction"]) if blend else METER_COLORS[result["state"]]
     return (
         f'<div class="sb-meter-row"><div class="sb-meter"><span style="width:{width:.1f}%;'
-        f'background:{color}"></span></div>'
+        f'background:{INK}"></span></div>'
         f'<div class="sb-meter-label"><span>{html.escape(label_left)}</span><span>{html.escape(result["label"])}</span></div></div>'
     )
 

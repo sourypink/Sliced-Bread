@@ -564,11 +564,3 @@ def test_rename_budget_refuses_a_taken_email(tmp_path):
         storage.rename_budget("mark@example.com", "ana@example.com")
     storage.rename_budget("mark@example.com", "marcus@example.com")
     assert not storage.account_exists("mark@example.com") and storage.load_budget("marcus@example.com") == make_budget()
-
-
-def test_spending_meters_redden_as_they_fill():
-    assert design.spending_color(0) == design.ACCENT
-    assert design.spending_color(budget.WARN_AT) == design.WARN
-    assert design.spending_color(1.0) == design.spending_color(1.5) == design.OVER
-    halfway = design.spending_color(0.5)
-    assert halfway not in (design.ACCENT, design.WARN, design.OVER)

@@ -1,4 +1,4 @@
-"""History charts for Sliced Bread: earned vs money out by month, zooming into a category, then a subcategory.
+"""History charts for Sliced Bread: income vs money out by month, zooming into a category, then a subcategory.
 HTML only, no Gradio.
 
 Built from plain HTML and CSS columns (not SVG) so labels stay readable at phone width. Follows the dataviz
@@ -146,7 +146,7 @@ def month_column(month, stacks, entries, total, opens_left):
 
 
 def history_chart(rows, view):
-    """Earned vs money out per month, or one category or subcategory split into its parts, bottom piece first."""
+    """Income vs money out per month, or one category or subcategory split into its parts, bottom piece first."""
     zoomed = view["level"] != "all"
     totals = view_totals(view, rows)
     tallest = max(totals) if zoomed else max(max(row["income"], total) for row, total in zip(rows, totals))
@@ -160,7 +160,7 @@ def history_chart(rows, view):
         stacks = [column(pieces, total / top * 100)]
         if not zoomed:
             stacks.insert(0, column([(row["income"], design.INCOME_COLOR, None)], row["income"] / top * 100))
-            entries.insert(0, ("Earned", design.INCOME_COLOR, row["income"]))
+            entries.insert(0, ("Income", design.INCOME_COLOR, row["income"]))
         total_label = "Total" if zoomed else "Money out"
         columns.append(month_column(full_month(row["key"]), stacks, entries, (total_label, total), index >= count / 2))
 
@@ -174,7 +174,7 @@ def history_chart(rows, view):
         f'<span class="{label_classes(count - 1 - index, every, phone_every)}">{row["label"]}</span>'
         for index, row in enumerate(rows)
     )
-    title = f"{view['name']} by month" if zoomed else "Earned vs money out"
+    title = f"{view['name']} by month" if zoomed else "Income vs money out"
     # A zoomed subcategory carries its category's marker; a category is its own marker.
     marker = design.marker(view["category"]) if view["level"] == "sub" else ""
     span = full_month(rows[0]["key"]) if count == 1 else f"{full_month(rows[0]['key'])} to {full_month(rows[-1]['key'])}"
@@ -214,7 +214,7 @@ def label_classes(months_back, every, phone_every):
 
 def legend_html(view):
     """Every piece's colour and name; the ones that zoom in are buttons."""
-    items = "" if view["level"] != "all" else f'<span><i style="background:{design.INCOME_COLOR}"></i>Earned</span>'
+    items = "" if view["level"] != "all" else f'<span><i style="background:{design.INCOME_COLOR}"></i>Income</span>'
     for name, color, zoom_to, _ in view["series"]:
         swatch = f'<i style="background:{color}"></i>{escape(name)}'
         items += f'<button data-sb-zoom="{escape(zoom_to)}">{swatch}</button>' if zoom_to else f"<span>{swatch}</span>"
@@ -225,18 +225,18 @@ def legend_html(view):
 
 def stat_tiles_html(rows, view):
     """The range in numbers. Plain sans, proportional digits: these are standalone figures."""
-    earned = sum(row["income"] for row in rows)
+    income = sum(row["income"] for row in rows)
     if view["level"] != "all":
         total = sum(view_totals(view, rows))
         active = [row for row in rows if row["income"] or row["spent"] or row["invested"]] or rows
-        share = f"{round(total * 100 / earned)}%" if earned else "0%"
+        share = f"{round(total * 100 / income)}%" if income else "0%"
         first = {"investing": "Invested", "savings": "Saved"}.get(view["category"], f"Spent on {view['name'].lower()}")
         tiles = [(first, budget.format_money(total), ""),
                  ("Monthly average", budget.format_money(total // len(active)), ""),
                  ("Share of income", share, "")]
     else:
         saved = sum(row["saved"] for row in rows)
-        tiles = [("Earned", budget.format_money(earned), ""),
+        tiles = [("Income", budget.format_money(income), ""),
                  ("Spent", budget.format_money(sum(row["spent"] for row in rows)), ""),
                  ("Invested", budget.format_money(sum(row["invested"] for row in rows)), ""),
                  ("Saved", budget.format_money(saved), " sb-over" if saved < 0 else "")]
@@ -250,7 +250,7 @@ def stat_tiles_html(rows, view):
 def numbers_table_html(rows, view):
     """Every number in the chart, as a table: the version that needs no hovering."""
     if view["level"] == "all":
-        columns = [("Earned", [row["income"] for row in rows]), ("Spent", [row["spent"] for row in rows]),
+        columns = [("Income", [row["income"] for row in rows]), ("Spent", [row["spent"] for row in rows]),
                    ("Invested", [row["invested"] for row in rows]), ("Saved", [row["saved"] for row in rows])]
     else:
         columns = [(name, values) for name, _, _, values in view["series"]] + [("Total", view_totals(view, rows))]
