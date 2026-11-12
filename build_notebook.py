@@ -16,7 +16,6 @@ PARTS = [
     ("charts.py", "Charts", "The History tab's chart, tiles and table, built as plain HTML from the numbers in budget.py."),
     ("app.py", "App screens", "The Gradio screens: log in, the Budget, History and Goals tabs, pop-ups and the profile page. The only file that uses Gradio."),
 ]
-TESTS = ("test_budget.py", "Automated tests for budget.py and storage.py, grouped like the code they check.")
 BUILDER = "build_notebook.py"
 
 # One line under each section's heading, by (file, section title). Every section needs one: the build stops if it's missing.
@@ -58,16 +57,6 @@ NOTES = {
     ("app.py", "Layout: pop-ups"): "The subcategory editor and the plan chooser.",
     ("app.py", "Layout: profile page"): "Name and email, password change, and delete my data.",
     ("app.py", "Wiring"): "Connects every button and box to its handler, and starts the app when run as a program.",
-    ("test_budget.py", PREAMBLE): "Imports and a sample budget the tests share.",
-    ("test_budget.py", "budget.py: input validation"): "Bad amounts and names are refused with a clear message.",
-    ("test_budget.py", "budget.py: calculations"): "Totals, what is left, meters and months.",
-    ("test_budget.py", "budget.py: editing a line"): "Editing and deleting lines.",
-    ("test_budget.py", "budget.py: percentage targets"): "The four shares must add up to 100, and the fourth box fills itself in.",
-    ("test_budget.py", "budget.py: investments and savings"): "Investing is not spending, and savings include what is left over.",
-    ("test_budget.py", "budget.py: subcategories"): "Adding, renaming, moving and removing subcategories without losing lines.",
-    ("test_budget.py", "budget.py: plan presets"): "Every preset makes 100, and the donut draws what it is given.",
-    ("test_budget.py", "budget.py: history"): "Month rows, ranges, biggest items and sample months.",
-    ("test_budget.py", "storage.py"): "Saving, accounts, passwords and emails.",
 }
 
 INTRO = """# Sliced Bread: a personal budget tracker
@@ -87,8 +76,7 @@ which adds to it. That way the files can import each other and the tests can run
 4. Design (`design.py`)
 5. Charts (`charts.py`)
 6. App screens (`app.py`)
-7. Run the app
-8. Optional: keep budgets on Google Drive, run the tests, read the app's log, how this notebook is made"""
+7. Run the app"""
 
 # The app runs in its own Python process, not inside this notebook's: a fresh process always uses the packages
 # the install cell just put on disk, even if this notebook loaded older ones earlier. Its output goes to app.log.
@@ -121,28 +109,6 @@ try:
     output.serve_kernel_port_as_iframe(int(port.group(1)) if port else 7860, height={PREVIEW_HEIGHT})
 except ImportError:
     print("Not in Colab: open the local or public URL above.")"""
-
-DRIVE = """# Save budgets to Google Drive so they survive a runtime reset. Then run section 7 again.
-import os
-
-DRIVE_FOLDER = "/content/drive/MyDrive/sliced-bread-data"
-
-try:
-    from google.colab import drive
-    drive.mount("/content/drive")
-except ImportError:
-    print("Not in Colab: budgets are saved in the data folder next to app.py.")
-except ValueError as error:
-    # Colab raises "mount failed" when the Drive sign-in pop-up is closed, refused or times out.
-    print(f"Drive didn't connect ({error}).")
-    print("Run this cell again and allow access in the pop-up, using the same Google account as Colab.")
-    print("Until then, budgets last only for this session.")
-else:
-    os.environ["SLICED_BREAD_DATA"] = DRIVE_FOLDER
-    print(f"Budgets now save to {DRIVE_FOLDER}. Run section 7 again to restart the app with it.")"""
-
-LOG = """# If a button shows an error, run this and send the output: it is the app's own log.
-!tail -n 60 app.log"""
 
 
 def markdown(text):
@@ -190,19 +156,6 @@ def build():
     cells += [
         markdown(f"## {len(PARTS) + 2}. Run the app"),
         code(RUN),
-        markdown(f"## {len(PARTS) + 3}. Optional\n\nNone of these are needed to use the app. Each cell works on its own."),
-        markdown("### Keep budgets on Google Drive\n\nColab forgets files when the runtime resets. Run this to save "
-                 "budgets in your Drive instead, then run section 7 again."),
-        code(DRIVE),
-        markdown(f"### Run the tests\n\n{TESTS[1]} Write the test file, then run it: every test should pass."),
-        *file_cells(TESTS[0]),
-        code(f"!python -m pytest -q {TESTS[0]}"),
-        markdown("### Read the app's log\n\nIf a button shows an error, this prints what the app wrote while running."),
-        code(LOG),
-        markdown(f"### How this notebook is made\n\nThis notebook is generated from the files in "
-                 f"[github.com/sourypink/Sliced-Bread](https://github.com/sourypink/Sliced-Bread) by `{BUILDER}`, below. "
-                 "Running this cell only saves it; it changes nothing here."),
-        code(f"%%writefile {BUILDER}\n" + open(BUILDER, encoding="utf-8").read().rstrip() + "\n"),
     ]
     notebook = {
         "cells": cells,
