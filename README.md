@@ -12,8 +12,8 @@ the Goals tab and place in one of the four. Each subcategory holds **items**, li
 shows which category it counts toward.
 
 The Goals tab is percentages only: four shares of income that add up to 100. There is no dollar limit and no
-savings goal, so a plan can't contradict itself. Category colours are blue, pink, violet and teal-blue; red,
-amber and green only ever mean over, near and on track.
+savings goal, so a plan can't contradict itself. Category colours are grey (Needs), orange (Wants), purple (Investing) and pink
+(Savings); income is yellow. Meters fill in black, and their words say near or over.
 
 ## Run it in Google Colab
 
